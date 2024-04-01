@@ -1,0 +1,13 @@
+version: "3"
+volumes:
+  psql:
+services:
+  psql:
+    image: postgres # this uses the 'latest' version
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: example # only do this in development
+    volumes:
+      - psql:/var/lib/postgresql/data # save data between restarts
+    expose:
+      - 5432
