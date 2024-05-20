@@ -9,3 +9,11 @@ edition = "2021"
 axum = { version = "0.7.4", features = ["ws", "http2", "macros"] }
 tokio = { version = "1.36.0", features = ["full"] }
 tower = "0.4.13"
+sqlx = { version = "0.7", features = [ "runtime-tokio", "tls-rustls", "postgres", "macros", "json", "ipnetwork", "uuid", "migrate", "chrono", "rust_decimal" ] }
+tokio-rustls = "0.26.0"
+rust_decimal = "1.35.0"
+chrono = "0.4.37"
+anyhow = "1.0.81"
+ipnetwork = "0.20.0"
+serde = { version = "1.0.202", features = ["derive", "alloc"] }
+serde_json = { version = "1.0.117", features = ["alloc"] }
