@@ -3,7 +3,7 @@ use std::{env, fs};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let password_file = env::var("PASSWORD_FILE")?;
+    let password_file = env::var("PASSWORD_FILE").unwrap_or("db/dev.password.txt".to_owned());
     let password = String::from_utf8(fs::read(password_file)?)?;
     let connection_string = format!("postgres://postgres:{}@localhost/szachus", &password);
     let db_pool = sqlx::postgres::PgPoolOptions::new()

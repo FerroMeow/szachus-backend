@@ -17,3 +17,6 @@ anyhow = "1.0.81"
 ipnetwork = "0.20.0"
 serde = { version = "1.0.202", features = ["derive", "alloc"] }
 serde_json = { version = "1.0.117", features = ["alloc"] }
+argon2 = { version = "0.5.3", features = ["std"] }
+rand = { version = "0.8.5", features = ["serde"] }
+jsonwebtoken = "9.3.0"

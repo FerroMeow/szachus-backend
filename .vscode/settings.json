@@ -2,5 +2,17 @@
   "cSpell.words": [
     "sqlx",
     "szachus"
+  ],
+  "sqltools.connections": [
+    {
+      "previewLimit": 50,
+      "server": "localhost",
+      "port": 5432,
+      "driver": "PostgreSQL",
+      "name": "szachus",
+      "group": "uniwersytet-sląski",
+      "database": "szachus",
+      "username": "postgres"
+    }
   ]
 }
