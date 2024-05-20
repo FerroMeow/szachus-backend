@@ -1,5 +1,8 @@
 use axum::{routing::get, Router};
+use game::ws_handler;
 use std::{env, fs};
+
+mod game;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -9,8 +12,14 @@ async fn main() -> anyhow::Result<()> {
     let db_pool = sqlx::postgres::PgPoolOptions::new()
         .max_connections(5)
         .connect(&connection_string);
-    let app = Router::new().route("/", get(|| async { "Hello, World!" }));
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+    let app_routes = Router::new()
+        .route("/", get(|| async { "Hello, World!" }))
+        .route("/ws/gameplay", get(ws_handler));
+    axum::serve(
+        tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap(),
+        app_routes,
+    )
+    .await
+    .unwrap();
     Ok(())
 }
