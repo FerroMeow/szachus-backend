@@ -1,10 +1,10 @@
 -- Add migration script here
 CREATE TABLE player (
   id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  username varchar(63) NOT NULL,
+  username varchar(63) NOT NULL UNIQUE,
   score int DEFAULT 0 CHECK (score >= 0) NOT NULL,
   password_hash text NOT NULL,
-  salt varchar(15) NOT NULL
+  salt varchar(63) NOT NULL
 );
 CREATE TABLE game (
   id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,

@@ -1,6 +1,8 @@
 use axum::{http::StatusCode, response::IntoResponse};
 pub struct AppError(anyhow::Error);
 
+pub type Result<T> = std::result::Result<T, AppError>;
+
 impl IntoResponse for AppError {
     fn into_response(self) -> axum::response::Response {
         (

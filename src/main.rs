@@ -1,13 +1,9 @@
-use axum::{routing::get, Router};
 use dotenv::dotenv;
-use game::ws_handler;
 use sqlx::{Pool, Postgres};
 use std::{env, fs};
-use user::user_routes;
 
 mod error;
-mod game;
-mod user;
+mod routes;
 
 #[derive(Clone)]
 struct ServerState {
@@ -25,14 +21,9 @@ async fn main() -> anyhow::Result<()> {
         .connect(&connection_string)
         .await
         .unwrap();
-    let app_routes = Router::new()
-        .route("/", get(|| async { "Hello, World!" }))
-        .route("/ws/gameplay", get(ws_handler))
-        .nest("/user", user_routes())
-        .with_state(ServerState { db_pool });
     axum::serve(
         tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap(),
-        app_routes,
+        routes::app_routes().with_state(ServerState { db_pool }),
     )
     .await
     .unwrap();
