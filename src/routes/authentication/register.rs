@@ -5,7 +5,7 @@ use serde::Deserialize;
 use serde_json::json;
 use sqlx::{Pool, Postgres};
 
-use crate::{error, routes::user::authentication::jwt::create_token, ServerState};
+use crate::{error, routes::authentication::jwt::create_token, ServerState};
 
 #[derive(Deserialize)]
 pub struct UserData {

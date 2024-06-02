@@ -2,7 +2,7 @@ use axum::{routing::post, Router};
 
 use crate::ServerState;
 
-mod jwt;
+pub mod jwt;
 mod login;
 mod register;
 

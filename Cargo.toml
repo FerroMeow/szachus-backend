@@ -21,3 +21,4 @@ argon2 = { version = "0.5.3", features = ["std"] }
 rand = { version = "0.8.5", features = ["serde"] }
 jsonwebtoken = "9.3.0"
 dotenv = "0.15.0"
+axum-extra = { version = "0.9.3", features = ["typed-header"] }
