@@ -1,10 +1,17 @@
 use axum::{
-    extract::{ws::WebSocket, WebSocketUpgrade},
-    response::IntoResponse,
+    routing::{get, post},
+    Router,
 };
 
-pub async fn ws_handler(ws: WebSocketUpgrade) -> impl IntoResponse {
-    ws.on_upgrade(handle_ws)
-}
+use crate::ServerState;
 
-async fn handle_ws(socket: WebSocket) {}
+mod matchmaking;
+mod turn;
+
+pub fn routes() -> Router<ServerState> {
+    Router::new()
+        // Matchmaking WebSocket, dropped when match found
+        .route("/", post(matchmaking::route_handler))
+        // Game lifecycle websocket
+        .route("/:id/turn/", get(turn::route_handler))
+}

@@ -27,13 +27,13 @@ async fn create_user(db_pool: &Pool<Postgres>, user_data: &UserData) -> anyhow::
     let argon2 = Argon2::default();
     let salt = SaltString::generate(OsRng);
     let password_hash = argon2.hash_password(user_data.password.as_bytes(), &salt)?;
-    sqlx::query!(
-        "INSERT INTO player (username, password_hash, salt) VALUES ($1, $2, $3)",
+    let user_id = sqlx::query!(
+        "INSERT INTO player (username, password_hash, salt) VALUES ($1, $2, $3) RETURNING id",
         user_data.username,
         password_hash.to_string(),
         salt.to_string()
     )
-    .execute(db_pool)
+    .fetch_one(db_pool)
     .await?;
-    create_token(&user_data.username)
+    create_token(user_id.id)
 }

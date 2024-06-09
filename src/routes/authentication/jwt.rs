@@ -13,11 +13,11 @@ use axum_extra::{
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Claims {
-    exp: usize,
-    iss: String, // Optional. Issuer
-    sub: String, // Optional. Subject (whom token refers to)
+    pub exp: usize,
+    pub iss: String, // Optional. Issuer
+    pub sub: i32,    // Optional. Subject (whom token refers to)
 }
 
 #[async_trait]
@@ -36,13 +36,13 @@ where
     }
 }
 
-pub fn create_token(username: &str) -> anyhow::Result<String> {
+pub fn create_token(user_id: i32) -> anyhow::Result<String> {
     let now = chrono::Local::now();
     let expiration_date = now + chrono::TimeDelta::hours(24);
     let claims: Claims = Claims {
         exp: expiration_date.timestamp() as usize,
         iss: "szachus-game".into(),
-        sub: username.into(),
+        sub: user_id.into(),
     };
     let jwt_token = encode(
         &Header::default(),

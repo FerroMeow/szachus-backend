@@ -10,8 +10,8 @@ CREATE TABLE game (
   id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   started_at timestamp NOT NULL,
   ended_at timestamp NOT NULL,
-  player_black int REFERENCES player,
-  player_white int REFERENCES player
+  player_black int REFERENCES player NOT NULL,
+  player_white int REFERENCES player NOT NULL
 );
 CREATE TABLE game_turn (
   game int REFERENCES game,

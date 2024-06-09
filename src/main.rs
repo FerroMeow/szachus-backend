@@ -1,6 +1,6 @@
 use dotenv::dotenv;
 use sqlx::{Pool, Postgres};
-use std::{env, fs};
+use std::{collections::VecDeque, env, fs};
 
 mod error;
 mod routes;
@@ -8,6 +8,7 @@ mod routes;
 #[derive(Clone)]
 struct ServerState {
     db_pool: Pool<Postgres>,
+    user_queue: VecDeque<i32>,
 }
 
 #[tokio::main]
@@ -23,7 +24,10 @@ async fn main() -> anyhow::Result<()> {
         .unwrap();
     axum::serve(
         tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap(),
-        routes::app_routes().with_state(ServerState { db_pool }),
+        routes::app_routes().with_state(ServerState {
+            db_pool,
+            user_queue: VecDeque::new(),
+        }),
     )
     .await
     .unwrap();

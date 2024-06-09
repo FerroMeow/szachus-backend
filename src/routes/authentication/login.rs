@@ -16,7 +16,7 @@ pub struct UserCredentials {
 }
 
 struct PlayerEntity {
-    username: String,
+    id: i32,
     password_hash: String,
 }
 
@@ -36,7 +36,7 @@ async fn authenticate_user(
 ) -> anyhow::Result<String> {
     let player = sqlx::query_as!(
         PlayerEntity,
-        "SELECT username, password_hash FROM player WHERE username = $1",
+        "SELECT id, password_hash FROM player WHERE username = $1",
         credentials.username
     )
     .fetch_optional(db_pool)
@@ -45,5 +45,5 @@ async fn authenticate_user(
 
     let parsed_hash = PasswordHash::new(&player.password_hash)?;
     Argon2::default().verify_password(credentials.password.as_bytes(), &parsed_hash)?;
-    create_token(&player.username)
+    create_token(player.id)
 }
