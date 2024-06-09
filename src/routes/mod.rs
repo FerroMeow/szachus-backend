@@ -3,7 +3,7 @@ use axum::{middleware, routing::get, Router};
 use crate::ServerState;
 
 mod authentication;
-mod game;
+pub mod game;
 
 pub fn app_routes() -> Router<ServerState> {
     Router::new()

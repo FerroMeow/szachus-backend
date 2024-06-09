@@ -1,9 +1,7 @@
-use std::collections::VecDeque;
-
 use axum::{
     extract::{
         ws::{Message, WebSocket},
-        FromRef, State, WebSocketUpgrade,
+        State, WebSocketUpgrade,
     },
     response::Response,
     Extension,
@@ -16,17 +14,10 @@ use sqlx::{Pool, Postgres};
 use crate::{
     error,
     routes::authentication::{self, jwt::Claims},
-    ServerState,
+    GlobalState,
 };
 
-#[derive(Default, Clone)]
-pub struct MatchmakingState(VecDeque<i32>);
-
-impl FromRef<ServerState> for MatchmakingState {
-    fn from_ref(input: &ServerState) -> Self {
-        MatchmakingState(input.user_queue.clone())
-    }
-}
+use super::MatchmakingState;
 
 #[derive(Serialize)]
 pub struct Game {
@@ -40,19 +31,17 @@ pub struct Game {
 pub async fn route_handler(
     ws: WebSocketUpgrade,
     State(queue_state): State<MatchmakingState>,
+    State(global_state): State<GlobalState>,
     Extension(claims): Extension<authentication::jwt::Claims>,
-    State(server_state): State<ServerState>,
 ) -> Response {
-    ws.on_upgrade(|socket| handle_ws(server_state, socket, claims))
+    ws.on_upgrade(|socket| handle_ws(global_state, claims, socket, queue_state))
 }
 
 async fn handle_ws(
-    ServerState {
-        db_pool,
-        mut user_queue,
-    }: ServerState,
-    mut socket: WebSocket,
+    GlobalState { db_pool }: GlobalState,
     claims: Claims,
+    mut socket: WebSocket,
+    MatchmakingState(mut user_queue): MatchmakingState,
 ) {
     while let Some(msg) = socket.recv().await {
         if msg.is_err() {

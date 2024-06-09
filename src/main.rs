@@ -1,4 +1,6 @@
+use axum::extract::FromRef;
 use dotenv::dotenv;
+use routes::game::MatchmakingState;
 use sqlx::{Pool, Postgres};
 use std::{collections::VecDeque, env, fs};
 
@@ -6,9 +8,20 @@ mod error;
 mod routes;
 
 #[derive(Clone)]
+struct GlobalState {
+    pub db_pool: Pool<Postgres>,
+}
+
+impl FromRef<ServerState> for GlobalState {
+    fn from_ref(input: &ServerState) -> Self {
+        input.global.clone()
+    }
+}
+
+#[derive(Clone)]
 struct ServerState {
-    db_pool: Pool<Postgres>,
-    user_queue: VecDeque<i32>,
+    global: GlobalState,
+    user_queue: MatchmakingState,
 }
 
 #[tokio::main]
@@ -25,8 +38,8 @@ async fn main() -> anyhow::Result<()> {
     axum::serve(
         tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap(),
         routes::app_routes().with_state(ServerState {
-            db_pool,
-            user_queue: VecDeque::new(),
+            global: GlobalState { db_pool },
+            user_queue: MatchmakingState(VecDeque::new()),
         }),
     )
     .await

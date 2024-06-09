@@ -24,7 +24,7 @@ pub async fn on_post(
     State(server_state): State<ServerState>,
     Json(credentials): Json<UserCredentials>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    let jwt = authenticate_user(&server_state.db_pool, &credentials).await?;
+    let jwt = authenticate_user(&server_state.global.db_pool, &credentials).await?;
     Ok(Json(json!({
         "jwt": jwt,
     })))

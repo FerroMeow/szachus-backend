@@ -42,7 +42,7 @@ pub fn create_token(user_id: i32) -> anyhow::Result<String> {
     let claims: Claims = Claims {
         exp: expiration_date.timestamp() as usize,
         iss: "szachus-game".into(),
-        sub: user_id.into(),
+        sub: user_id,
     };
     let jwt_token = encode(
         &Header::default(),

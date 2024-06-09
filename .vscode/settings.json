@@ -1,5 +1,9 @@
 {
   "cSpell.words": [
+    "chrono",
+    "Hasher",
+    "jsonwebtoken",
+    "rngs",
     "sqlx",
     "szachus"
   ],

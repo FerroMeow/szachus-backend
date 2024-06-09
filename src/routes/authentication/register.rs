@@ -5,7 +5,7 @@ use serde::Deserialize;
 use serde_json::json;
 use sqlx::{Pool, Postgres};
 
-use crate::{error, routes::authentication::jwt::create_token, ServerState};
+use crate::{error, routes::authentication::jwt::create_token, GlobalState};
 
 #[derive(Deserialize)]
 pub struct UserData {
@@ -14,10 +14,10 @@ pub struct UserData {
 }
 
 pub async fn on_register(
-    State(server_state): State<ServerState>,
+    State(global_state): State<GlobalState>,
     Json(user_data): Json<UserData>,
 ) -> error::Result<Json<serde_json::Value>> {
-    let jwt = create_user(&server_state.db_pool, &user_data).await?;
+    let jwt = create_user(&global_state.db_pool, &user_data).await?;
     Ok(Json(json!({
         "jwt": jwt
     })))
