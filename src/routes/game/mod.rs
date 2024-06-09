@@ -1,18 +1,24 @@
-use std::collections::VecDeque;
+use std::{collections::HashMap, sync::Arc};
 
 use axum::{
-    extract::FromRef,
-    routing::{get, post},
+    extract::{
+        ws::{Message, WebSocket},
+        FromRef,
+    },
+    routing::get,
     Router,
 };
+use futures::{lock::Mutex, stream::SplitSink};
 
 use crate::ServerState;
 
-mod matchmaking;
+pub mod matchmaking;
 mod turn;
 
+type MatchmakingInnerState = SplitSink<WebSocket, Message>;
+
 #[derive(Default, Clone)]
-pub struct MatchmakingState(pub VecDeque<i32>);
+pub struct MatchmakingState(pub Arc<Mutex<HashMap<i32, Arc<Mutex<MatchmakingInnerState>>>>>);
 
 impl FromRef<ServerState> for MatchmakingState {
     fn from_ref(input: &ServerState) -> Self {
@@ -23,7 +29,7 @@ impl FromRef<ServerState> for MatchmakingState {
 pub fn routes() -> Router<ServerState> {
     Router::new()
         // Matchmaking WebSocket, dropped when match found
-        .route("/", post(matchmaking::route_handler))
+        .route("/", get(matchmaking::route_handler))
         // Game lifecycle websocket
         .route("/:id/turn/", get(turn::route_handler))
 }

@@ -1,8 +1,9 @@
 use axum::extract::FromRef;
 use dotenv::dotenv;
+use futures::lock::Mutex;
 use routes::game::MatchmakingState;
 use sqlx::{Pool, Postgres};
-use std::{collections::VecDeque, env, fs};
+use std::{collections::HashMap, env, fs, sync::Arc};
 
 mod error;
 mod routes;
@@ -39,7 +40,7 @@ async fn main() -> anyhow::Result<()> {
         tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap(),
         routes::app_routes().with_state(ServerState {
             global: GlobalState { db_pool },
-            user_queue: MatchmakingState(VecDeque::new()),
+            user_queue: MatchmakingState(Arc::new(Mutex::new(HashMap::new()))),
         }),
     )
     .await
