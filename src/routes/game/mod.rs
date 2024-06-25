@@ -8,17 +8,34 @@ use axum::{
     routing::get,
     Router,
 };
-use futures::{lock::Mutex, stream::SplitSink};
+use futures::{lock::Mutex, stream};
+use matchmaking::Game;
+use tokio::task::JoinHandle;
 
 use crate::ServerState;
 
+pub mod gameplay;
 pub mod matchmaking;
-mod turn;
+pub mod rules;
 
-type MatchmakingInnerState = SplitSink<WebSocket, Message>;
+pub type SplitSink = stream::SplitSink<WebSocket, Message>;
+pub type SplitStream = stream::SplitStream<WebSocket>;
 
 #[derive(Default, Clone)]
-pub struct MatchmakingState(pub Arc<Mutex<HashMap<i32, Arc<Mutex<MatchmakingInnerState>>>>>);
+pub struct MatchmakingState(
+    pub  Arc<
+        Mutex<
+            HashMap<
+                i32,
+                (
+                    Arc<Mutex<SplitSink>>,
+                    Arc<Mutex<SplitStream>>,
+                    Arc<JoinHandle<()>>,
+                ),
+            >,
+        >,
+    >,
+);
 
 impl FromRef<ServerState> for MatchmakingState {
     fn from_ref(input: &ServerState) -> Self {
@@ -26,10 +43,16 @@ impl FromRef<ServerState> for MatchmakingState {
     }
 }
 
+pub struct OpenGame {
+    pub game_data: Game,
+    pub user_stream: (
+        (Arc<Mutex<SplitSink>>, Arc<Mutex<SplitStream>>),
+        (Arc<Mutex<SplitSink>>, Arc<Mutex<SplitStream>>),
+    ),
+}
+
 pub fn routes() -> Router<ServerState> {
     Router::new()
         // Matchmaking WebSocket, dropped when match found
         .route("/", get(matchmaking::route_handler))
-        // Game lifecycle websocket
-        .route("/:id/turn/", get(turn::route_handler))
 }

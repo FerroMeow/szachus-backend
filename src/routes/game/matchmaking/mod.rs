@@ -20,9 +20,9 @@ use crate::{
     GlobalState, ServerState,
 };
 
-use super::MatchmakingState;
+use super::{gameplay::gameplay_loop, MatchmakingState, OpenGame};
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct Game {
     id: i32,
     started_at: NaiveDateTime,
@@ -53,63 +53,77 @@ async fn handle_ws(
     socket: WebSocket,
     MatchmakingState(user_queue): MatchmakingState,
 ) {
-    let (tx, mut rx) = socket.split();
+    let (tx, rx) = socket.split();
 
-    let arc_tx = Arc::new(Mutex::new(tx));
+    let (tx, rx) = (Arc::new(Mutex::new(tx)), Arc::new(Mutex::new(rx)));
     let users_in_queue = user_queue
         .lock()
         .await
         .iter()
         .find(|(id, _)| **id != claims.sub)
         .map(|(id, tx)| (*id, tx.clone()));
-    match users_in_queue {
-        Some((opponent_id, opponent_tx)) => {
-            let Ok(game) = create_game(&db_pool, claims.sub, opponent_id).await else {
-                return;
-            };
-            let Ok(game_json) = serde_json::to_string(&MatchmakingResponse::Success(game)) else {
-                return;
-            };
-            let Ok(_) = join_all([arc_tx.clone(), opponent_tx.clone()].map(|tx| {
-                let game_json = game_json.clone();
-                async move {
-                    tx.clone()
-                        .lock()
-                        .await
-                        .send(Message::Text(game_json))
-                        .await
-                        .map_err(|err| {
-                            println!("{:?}", err);
-                            err
-                        })
-                }
-            }))
-            .await
-            .into_iter()
-            .collect::<Result<Vec<()>, axum::Error>>() else {
-                return;
-            };
-            let mut user_queue_lock = user_queue.lock().await;
-            for (id, tx) in [(claims.sub, arc_tx), (opponent_id, opponent_tx)] {
-                user_queue_lock.remove(&id);
-                tx.lock().await.close().await.unwrap();
-            }
+    let (echo_tx, echo_rx) = (tx.clone(), rx.clone());
+    let echo_task = Arc::new(tokio::spawn(async move {
+        while let Some(Ok(_)) = echo_rx.clone().lock().await.next().await {
+            let _ = echo_tx
+                .clone()
+                .lock()
+                .await
+                .send(Message::Text(
+                    serde_json::to_string(&MatchmakingResponse::Searching)
+                        .unwrap_or("".to_string()),
+                ))
+                .await;
+            println!("Response sent");
         }
-        None => {
-            user_queue.lock().await.insert(claims.sub, arc_tx.clone());
-            while let Some(Ok(_)) = rx.next().await {
-                let _ = arc_tx
+    }));
+    if let Some((opponent_id, opponent_state)) = users_in_queue {
+        let Ok(game) = create_game(&db_pool, claims.sub, opponent_id).await else {
+            return;
+        };
+        let Ok(game_json) = serde_json::to_string(&MatchmakingResponse::Success(game.clone()))
+        else {
+            return;
+        };
+        let Ok(_) = join_all([tx.clone(), opponent_state.0.clone()].map(|tx| {
+            let game_json = game_json.clone();
+            async move {
+                tx.clone()
                     .lock()
                     .await
-                    .send(Message::Text(
-                        serde_json::to_string(&MatchmakingResponse::Searching)
-                            .unwrap_or("".to_string()),
-                    ))
-                    .await;
-                println!("Response sent");
+                    .send(Message::Text(game_json))
+                    .await
+                    .map_err(|err| {
+                        println!("{:?}", err);
+                        err
+                    })
             }
-        }
-    };
+        }))
+        .await
+        .into_iter()
+        .collect::<Result<Vec<()>, axum::Error>>() else {
+            return;
+        };
+        let open_game = OpenGame {
+            game_data: game,
+            user_stream: (
+                (tx.clone(), rx.clone()),
+                (opponent_state.0.clone(), opponent_state.1),
+            ),
+        };
+        let game_echo_task = echo_task.clone();
+        let _ = tokio::spawn(async move {
+            opponent_state.2.abort();
+            game_echo_task.abort();
+            gameplay_loop(open_game).await
+        })
+        .await;
+    }
+    user_queue
+        .clone()
+        .lock()
+        .await
+        .insert(claims.sub, (tx.clone(), rx.clone(), echo_task.clone()));
 }
 
 async fn create_game(
