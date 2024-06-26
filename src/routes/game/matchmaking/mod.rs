@@ -11,7 +11,7 @@ use axum::{
 
 use chrono::prelude::*;
 use futures::{future::join_all, lock::Mutex, SinkExt, StreamExt};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Postgres};
 
 use crate::{
@@ -20,9 +20,9 @@ use crate::{
     GlobalState, ServerState,
 };
 
-use super::{gameplay::gameplay_loop, MatchmakingState, OpenGame};
+use super::{gameplay::gameplay_loop, rules::ChessBoard, MatchmakingState, OpenGame};
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Game {
     id: i32,
     started_at: NaiveDateTime,
@@ -41,10 +41,13 @@ pub async fn route_handler(
     ws.on_upgrade(|socket: WebSocket| handle_ws(global_state, claims, socket, queue_state))
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize, Clone)]
 enum MatchmakingResponse {
     Searching,
-    Success(Game),
+    Success {
+        game_data: Game,
+        game_board: ChessBoard,
+    },
 }
 
 async fn handle_ws(
@@ -78,11 +81,24 @@ async fn handle_ws(
         }
     }));
     if let Some((opponent_id, opponent_state)) = users_in_queue {
-        let Ok(game) = create_game(&db_pool, claims.sub, opponent_id).await else {
+        let Ok(game_data) = create_game(&db_pool, claims.sub, opponent_id).await else {
             return;
         };
-        let Ok(game_json) = serde_json::to_string(&MatchmakingResponse::Success(game.clone()))
-        else {
+        let Ok(chess_board) = ChessBoard::new() else {
+            return;
+        };
+        let open_game = OpenGame {
+            game_data: game_data.clone(),
+            chess_board: Arc::new(Mutex::new(chess_board)),
+            user_stream: (
+                (tx.clone(), rx.clone()),
+                (opponent_state.0.clone(), opponent_state.1),
+            ),
+        };
+        let Ok(game_json) = serde_json::to_string(&MatchmakingResponse::Success {
+            game_board: open_game.chess_board.clone().lock().await.clone(),
+            game_data: open_game.game_data.clone(),
+        }) else {
             return;
         };
         let Ok(_) = join_all([tx.clone(), opponent_state.0.clone()].map(|tx| {
@@ -103,13 +119,6 @@ async fn handle_ws(
         .into_iter()
         .collect::<Result<Vec<()>, axum::Error>>() else {
             return;
-        };
-        let open_game = OpenGame {
-            game_data: game,
-            user_stream: (
-                (tx.clone(), rx.clone()),
-                (opponent_state.0.clone(), opponent_state.1),
-            ),
         };
         let game_echo_task = echo_task.clone();
         let _ = tokio::spawn(async move {

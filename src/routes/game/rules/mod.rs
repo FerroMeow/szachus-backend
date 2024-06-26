@@ -1,6 +1,11 @@
-use anyhow::bail;
-use rust_decimal::prelude::Zero;
+use std::sync::Arc;
 
+use anyhow::bail;
+use futures::lock::Mutex;
+use rust_decimal::prelude::Zero;
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Serialize, Deserialize)]
 pub enum PieceType {
     Rook,
     Knight,
@@ -10,18 +15,18 @@ pub enum PieceType {
     Pawn,
 }
 
-#[derive(PartialEq)]
-enum PieceColor {
+#[derive(PartialEq, Clone, Serialize, Deserialize)]
+pub enum PieceColor {
     White,
     Black,
 }
 
-#[derive(PartialEq, Clone)]
-struct Row(u8);
+#[derive(PartialEq, Clone, Serialize, Deserialize)]
+pub struct Row(u8);
 
 impl Row {
     pub fn new(row: i8) -> anyhow::Result<Self> {
-        if row < 0 || row > 7 {
+        if !(0..=7).contains(&row) {
             bail!("Row must be between 0 and 7");
         }
         Ok(Self(row as u8))
@@ -40,12 +45,12 @@ impl std::ops::Add for Row {
     }
 }
 
-#[derive(PartialEq, Clone)]
-struct Column(u8);
+#[derive(PartialEq, Clone, Serialize, Deserialize)]
+pub struct Column(u8);
 
 impl Column {
     pub fn new(column: i8) -> anyhow::Result<Self> {
-        if column < 0 || column > 7 {
+        if !(0..=7).contains(&column) {
             bail!("Column must be between 0 and 7");
         }
         Ok(Self(column as u8))
@@ -64,7 +69,7 @@ impl std::ops::Add for Column {
     }
 }
 
-#[derive(PartialEq, Clone)]
+#[derive(PartialEq, Clone, Serialize, Deserialize)]
 pub struct Position {
     row: Row,
     column: Column,
@@ -90,6 +95,7 @@ impl std::ops::Sub for Position {
     }
 }
 
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Piece {
     piece_type: PieceType,
     color: PieceColor,
@@ -98,9 +104,24 @@ pub struct Piece {
 }
 
 impl Piece {
-    pub fn move_piece_to(
+    pub fn new(piece_type: PieceType, color: PieceColor, column: i8) -> anyhow::Result<Piece> {
+        let row = match (&piece_type, &color) {
+            (PieceType::Pawn, PieceColor::White) => 1,
+            (PieceType::Pawn, PieceColor::Black) => 6,
+            (_, PieceColor::White) => 0,
+            (_, PieceColor::Black) => 7,
+        };
+        Ok(Piece {
+            piece_type,
+            color,
+            position: Position::new(row, column)?,
+            times_moved: 0,
+        })
+    }
+
+    pub async fn move_piece_to(
         &mut self,
-        game: &mut ChessGame,
+        game: Arc<Mutex<ChessBoard>>,
         new_position: Position,
     ) -> anyhow::Result<()> {
         let mut position_difference = new_position.clone() - self.position.clone();
@@ -109,7 +130,8 @@ impl Piece {
         };
         match self.piece_type {
             PieceType::Pawn => {
-                self.pawn_move(new_position.clone(), position_difference, game)?;
+                self.pawn_move(new_position.clone(), position_difference, game)
+                    .await?;
                 match self.color {
                     PieceColor::White if new_position.row.0 == 7 => {
                         self.piece_type = PieceType::Queen;
@@ -127,7 +149,10 @@ impl Piece {
                 {
                     bail!("Incorrect knight move!");
                 }
-                let _ = game.remove_piece_at(&new_position, &self.color);
+                let _ = game
+                    .lock()
+                    .await
+                    .remove_piece_at(&new_position, &self.color);
                 self.position = new_position;
                 Ok(())
             }
@@ -135,45 +160,64 @@ impl Piece {
                 if !(position_difference.0.abs() <= 1 && position_difference.1.abs() <= 1) {
                     bail!("Incorrect King move!");
                 }
-                let _ = game.remove_piece_at(&new_position, &self.color);
+                let _ = game
+                    .clone()
+                    .lock()
+                    .await
+                    .remove_piece_at(&new_position, &self.color);
                 self.position = new_position;
                 Ok(())
             }
             PieceType::Rook => {
-                self.rook_move(new_position.clone(), position_difference, game)?;
-                let _ = game.remove_piece_at(&new_position, &self.color);
+                self.rook_move(new_position.clone(), position_difference, game.clone())
+                    .await?;
+                let _ = game
+                    .clone()
+                    .lock()
+                    .await
+                    .remove_piece_at(&new_position, &self.color);
                 self.position = new_position;
                 Ok(())
             }
             PieceType::Bishop => {
-                self.bishop_move(new_position.clone(), position_difference, game)?;
-                let _ = game.remove_piece_at(&new_position, &self.color);
+                self.bishop_move(new_position.clone(), position_difference, game.clone())
+                    .await?;
+                let _ = game
+                    .clone()
+                    .lock()
+                    .await
+                    .remove_piece_at(&new_position, &self.color);
                 self.position = new_position;
                 Ok(())
             }
             PieceType::Queen => {
                 let move_successful = [
-                    self.rook_move(new_position.clone(), position_difference, game),
-                    self.bishop_move(new_position.clone(), position_difference, game),
+                    self.rook_move(new_position.clone(), position_difference, game.clone())
+                        .await,
+                    self.bishop_move(new_position.clone(), position_difference, game.clone())
+                        .await,
                 ]
                 .iter()
                 .any(|result| result.is_ok());
                 if !move_successful {
                     bail!("Incorrect queen move");
                 }
-                let _ = game.remove_piece_at(&new_position, &self.color);
+                let _ = game
+                    .clone()
+                    .lock()
+                    .await
+                    .remove_piece_at(&new_position, &self.color);
                 self.position = new_position;
                 Ok(())
             }
-            _ => bail!("Unrecognized piece type"),
         }
     }
 
-    fn rook_move(
+    async fn rook_move(
         &mut self,
         new_position: Position,
         position_difference: (i8, i8),
-        game: &mut ChessGame,
+        game: Arc<Mutex<ChessBoard>>,
     ) -> Result<(), anyhow::Error> {
         let (row_mod, col_mod) = match position_difference {
             (row, col) if (row.is_negative() && col.is_zero()) => (-1, 0),
@@ -191,17 +235,23 @@ impl Piece {
             if current_position == new_position {
                 return Ok(());
             }
-            if game.piece_at(&current_position).is_some() {
+            if game
+                .clone()
+                .lock()
+                .await
+                .find_piece_at(&current_position)
+                .is_some()
+            {
                 bail!("Cannot move over a tile");
             }
         }
     }
 
-    fn bishop_move(
+    async fn bishop_move(
         &mut self,
         new_position: Position,
         position_difference: (i8, i8),
-        game: &mut ChessGame,
+        game: Arc<Mutex<ChessBoard>>,
     ) -> Result<(), anyhow::Error> {
         if position_difference.0 == 0
             || position_difference.1 == 0
@@ -225,17 +275,23 @@ impl Piece {
             if current_position == new_position {
                 return Ok(());
             }
-            if game.piece_at(&current_position).is_some() {
+            if game
+                .clone()
+                .lock()
+                .await
+                .find_piece_at(&current_position)
+                .is_some()
+            {
                 bail!("Cannot move over a tile");
             }
         }
     }
 
-    fn pawn_move(
+    async fn pawn_move(
         &mut self,
         new_position: Position,
         position_difference: (i8, i8),
-        game: &mut ChessGame,
+        game: Arc<Mutex<ChessBoard>>,
     ) -> Result<(), anyhow::Error> {
         if self.position.column == new_position.column {
             if position_difference.0 > 2 {
@@ -247,14 +303,30 @@ impl Piece {
             if self.times_moved != 0 && position_difference.0 == 2 {
                 bail!("Can't move more than one tile after the first move!");
             };
-            if game.piece_at(&new_position).is_some() {
+            if game
+                .clone()
+                .lock()
+                .await
+                .find_piece_at(&new_position)
+                .is_some()
+            {
                 bail!("Cannot move to the new position, there is already a piece there.");
             }
             self.position = new_position;
             return Ok(());
         };
-        if position_difference.1.abs() == 1 && game.piece_at(&new_position).is_some() {
-            game.remove_piece_at(&new_position, &self.color)?;
+        if position_difference.1.abs() == 1
+            && game
+                .clone()
+                .lock()
+                .await
+                .find_piece_at(&new_position)
+                .is_some()
+        {
+            game.clone()
+                .lock()
+                .await
+                .remove_piece_at(&new_position, &self.color)?;
             self.position = new_position;
             return Ok(());
         }
@@ -262,20 +334,50 @@ impl Piece {
     }
 }
 
-pub struct ChessGame {
-    pawns: Vec<Piece>,
+#[derive(Clone, Serialize, Deserialize)]
+pub struct ChessBoard {
+    pieces: Vec<Piece>,
 }
 
-impl ChessGame {
-    pub fn piece_at(&self, position: &Position) -> Option<&Piece> {
-        self.pawns
+impl ChessBoard {
+    pub fn new() -> anyhow::Result<Self> {
+        let pieces = [PieceColor::White, PieceColor::Black]
+            .into_iter()
+            .map(|color| {
+                (0..8)
+                    .map(|column| Piece::new(PieceType::Pawn, color.clone(), column))
+                    .chain(
+                        [
+                            Piece::new(PieceType::Rook, color.clone(), 0),
+                            Piece::new(PieceType::Rook, color.clone(), 7),
+                            Piece::new(PieceType::Knight, color.clone(), 1),
+                            Piece::new(PieceType::Knight, color.clone(), 6),
+                            Piece::new(PieceType::Bishop, color.clone(), 2),
+                            Piece::new(PieceType::Bishop, color.clone(), 5),
+                            Piece::new(PieceType::Queen, color.clone(), 3),
+                            Piece::new(PieceType::King, color.clone(), 4),
+                        ]
+                        .into_iter(),
+                    )
+                    .collect::<Result<Vec<_>, _>>()
+            })
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>();
+        Ok(Self { pieces })
+    }
+
+    pub fn find_piece_at(&self, position: &Position) -> Option<&Piece> {
+        self.pieces
             .iter()
             .find(move |piece| piece.position == *position)
     }
-    pub fn enemy_piece_at(&self, position: &Position, color: PieceColor) -> Option<&Piece> {
-        self.pawns
+
+    pub fn find_own_piece_at(&self, position: &Position, color: PieceColor) -> Option<&Piece> {
+        self.pieces
             .iter()
-            .find(move |piece| piece.position == *position && piece.color != color)
+            .find(move |piece| piece.position == *position && piece.color == color)
     }
 
     pub fn remove_piece_at(
@@ -284,19 +386,19 @@ impl ChessGame {
         color: &PieceColor,
     ) -> anyhow::Result<Option<Piece>> {
         let Some(position) = self
-            .pawns
+            .pieces
             .iter()
             .position(move |piece| piece.position == *position)
         else {
             bail!("piece not found at the new position");
         };
-        if let Some(pawn) = self.pawns.get(position) {
+        if let Some(pawn) = self.pieces.get(position) {
             if pawn.color == *color {
                 return Ok(None);
             }
         } else {
             bail!("Piece not found!");
         }
-        Ok(Some(self.pawns.swap_remove(position)))
+        Ok(Some(self.pieces.swap_remove(position)))
     }
 }

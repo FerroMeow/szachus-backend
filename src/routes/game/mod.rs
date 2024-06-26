@@ -10,6 +10,7 @@ use axum::{
 };
 use futures::{lock::Mutex, stream};
 use matchmaking::Game;
+use rules::ChessBoard;
 use tokio::task::JoinHandle;
 
 use crate::ServerState;
@@ -21,21 +22,10 @@ pub mod rules;
 pub type SplitSink = stream::SplitSink<WebSocket, Message>;
 pub type SplitStream = stream::SplitStream<WebSocket>;
 
+type PlayerState = (ArcMut<SplitSink>, ArcMut<SplitStream>, Arc<JoinHandle<()>>);
+
 #[derive(Default, Clone)]
-pub struct MatchmakingState(
-    pub  Arc<
-        Mutex<
-            HashMap<
-                i32,
-                (
-                    Arc<Mutex<SplitSink>>,
-                    Arc<Mutex<SplitStream>>,
-                    Arc<JoinHandle<()>>,
-                ),
-            >,
-        >,
-    >,
-);
+pub struct MatchmakingState(pub ArcMut<HashMap<i32, PlayerState>>);
 
 impl FromRef<ServerState> for MatchmakingState {
     fn from_ref(input: &ServerState) -> Self {
@@ -43,12 +33,14 @@ impl FromRef<ServerState> for MatchmakingState {
     }
 }
 
+type ArcMut<T> = Arc<Mutex<T>>;
+
+type SinkStream = (ArcMut<SplitSink>, ArcMut<SplitStream>);
+
 pub struct OpenGame {
     pub game_data: Game,
-    pub user_stream: (
-        (Arc<Mutex<SplitSink>>, Arc<Mutex<SplitStream>>),
-        (Arc<Mutex<SplitSink>>, Arc<Mutex<SplitStream>>),
-    ),
+    pub chess_board: Arc<Mutex<ChessBoard>>,
+    pub user_stream: (SinkStream, SinkStream),
 }
 
 pub fn routes() -> Router<ServerState> {
