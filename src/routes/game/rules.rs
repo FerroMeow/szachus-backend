@@ -5,7 +5,7 @@ use futures::lock::Mutex;
 use rust_decimal::prelude::Zero;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(PartialEq, Clone, Serialize, Deserialize)]
 pub enum PieceType {
     Rook,
     Knight,
@@ -97,10 +97,10 @@ impl std::ops::Sub for Position {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Piece {
-    piece_type: PieceType,
-    color: PieceColor,
-    position: Position,
-    times_moved: u8,
+    pub piece_type: PieceType,
+    pub color: PieceColor,
+    pub position: Position,
+    pub times_moved: u8,
 }
 
 impl Piece {
@@ -141,7 +141,6 @@ impl Piece {
                     }
                     _ => (),
                 };
-                Ok(())
             }
             PieceType::Knight => {
                 if !((position_difference.0.abs() == 1 && position_difference.1.abs() == 2)
@@ -154,7 +153,6 @@ impl Piece {
                     .await
                     .remove_piece_at(&new_position, &self.color);
                 self.position = new_position;
-                Ok(())
             }
             PieceType::King => {
                 if !(position_difference.0.abs() <= 1 && position_difference.1.abs() <= 1) {
@@ -166,7 +164,6 @@ impl Piece {
                     .await
                     .remove_piece_at(&new_position, &self.color);
                 self.position = new_position;
-                Ok(())
             }
             PieceType::Rook => {
                 self.rook_move(new_position.clone(), position_difference, game.clone())
@@ -177,7 +174,6 @@ impl Piece {
                     .await
                     .remove_piece_at(&new_position, &self.color);
                 self.position = new_position;
-                Ok(())
             }
             PieceType::Bishop => {
                 self.bishop_move(new_position.clone(), position_difference, game.clone())
@@ -188,7 +184,6 @@ impl Piece {
                     .await
                     .remove_piece_at(&new_position, &self.color);
                 self.position = new_position;
-                Ok(())
             }
             PieceType::Queen => {
                 let move_successful = [
@@ -208,9 +203,10 @@ impl Piece {
                     .await
                     .remove_piece_at(&new_position, &self.color);
                 self.position = new_position;
-                Ok(())
             }
-        }
+        };
+        self.times_moved += 1;
+        Ok(())
     }
 
     async fn rook_move(
@@ -336,7 +332,7 @@ impl Piece {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ChessBoard {
-    pieces: Vec<Piece>,
+    pub pieces: Vec<Piece>,
 }
 
 impl ChessBoard {

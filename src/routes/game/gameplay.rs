@@ -1,10 +1,12 @@
-use anyhow::bail;
+use anyhow::{anyhow, bail};
 use axum::extract::ws::Message;
-use futures::{SinkExt, StreamExt};
-use serde::Deserialize;
+use futures::{lock::Mutex, SinkExt, StreamExt};
+use serde::{Deserialize, Serialize};
+
+use crate::routes::game::rules::PieceType;
 
 use super::{
-    rules::{PieceColor, Position},
+    rules::{ChessBoard, PieceColor, Position},
     OpenGame,
 };
 
@@ -12,6 +14,14 @@ use super::{
 pub struct ChessMove {
     position_from: Position,
     position_to: Position,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+enum GameMessage<'a> {
+    NewTurn(bool),
+    Error(&'a str),
+    Notification(&'a str),
+    GameEnd(bool),
 }
 
 pub async fn gameplay_loop(game: OpenGame) -> anyhow::Result<()> {
@@ -30,15 +40,17 @@ pub async fn gameplay_loop(game: OpenGame) -> anyhow::Result<()> {
             .0
             .lock()
             .await
-            .send(Message::Text(String::from("It's your turn")))
+            .send(Message::Text(serde_json::to_string(
+                &GameMessage::NewTurn(true),
+            )?))
             .await?;
         passive_player
             .0
             .lock()
             .await
-            .send(Message::Text(String::from(
-                "It's not your turn, wait for your opponent's action",
-            )))
+            .send(Message::Text(serde_json::to_string(
+                &GameMessage::NewTurn(false),
+            )?))
             .await?;
 
         loop {
@@ -47,9 +59,9 @@ pub async fn gameplay_loop(game: OpenGame) -> anyhow::Result<()> {
                     .0
                     .lock()
                     .await
-                    .send(Message::Text(String::from(
+                    .send(Message::Text(serde_json::to_string(&GameMessage::Error(
                         "The message is not a valid string!",
-                    )))
+                    ))?))
                     .await?;
                 bail!("Bad message error");
             };
@@ -58,7 +70,9 @@ pub async fn gameplay_loop(game: OpenGame) -> anyhow::Result<()> {
                     .0
                     .lock()
                     .await
-                    .send(Message::Text(String::from("Message is not a valid move!")))
+                    .send(Message::Text(serde_json::to_string(&GameMessage::Error(
+                        "The message is not a valid move!",
+                    ))?))
                     .await?;
                 continue;
             };
@@ -74,9 +88,9 @@ pub async fn gameplay_loop(game: OpenGame) -> anyhow::Result<()> {
                     .0
                     .lock()
                     .await
-                    .send(Message::Text(
-                        "You don't have a piece at  this position".to_string(),
-                    ))
+                    .send(Message::Text(serde_json::to_string(&GameMessage::Error(
+                        "You don't have a piece at this position!",
+                    ))?))
                     .await?;
                 continue;
             };
@@ -89,7 +103,9 @@ pub async fn gameplay_loop(game: OpenGame) -> anyhow::Result<()> {
                     .0
                     .lock()
                     .await
-                    .send(Message::Text(error.to_string()))
+                    .send(Message::Text(serde_json::to_string(&GameMessage::Error(
+                        &error.to_string(),
+                    ))?))
                     .await?;
                 continue;
             };
@@ -97,10 +113,64 @@ pub async fn gameplay_loop(game: OpenGame) -> anyhow::Result<()> {
                 .0
                 .lock()
                 .await
-                .send(Message::Text(String::from("Moved correctly.")))
+                .send(Message::Text(serde_json::to_string(
+                    &GameMessage::Notification("Moved correctly"),
+                )?))
                 .await?;
             break;
         }
+        if let Some(winning_color) = check_win_condition(&game.chess_board).await? {
+            let (winner, loser) = if active_color == winning_color {
+                (active_player, passive_player)
+            } else {
+                (passive_player, active_player)
+            };
+            winner
+                .0
+                .lock()
+                .await
+                .send(Message::Text(serde_json::to_string(
+                    &GameMessage::GameEnd(true),
+                )?))
+                .await?;
+            loser
+                .0
+                .lock()
+                .await
+                .send(Message::Text(serde_json::to_string(
+                    &GameMessage::GameEnd(false),
+                )?))
+                .await?;
+            return Ok(());
+        };
         is_firsts_turn = !is_firsts_turn;
+    }
+}
+
+async fn check_win_condition(
+    chess_board: &Mutex<ChessBoard>,
+) -> anyhow::Result<Option<PieceColor>> {
+    let (white_king, black_king) = {
+        let board_lock = chess_board.lock().await;
+        let white_king = board_lock
+            .pieces
+            .iter()
+            .find(|piece| piece.color == PieceColor::White && piece.piece_type == PieceType::King)
+            .cloned();
+        let black_king = board_lock
+            .pieces
+            .iter()
+            .find(|piece| piece.color == PieceColor::Black && piece.piece_type == PieceType::King)
+            .cloned();
+        (white_king, black_king)
+    };
+
+    match (white_king, black_king) {
+        (None, Some(_)) => Ok(Some(PieceColor::Black)),
+        (Some(_), None) => Ok(Some(PieceColor::White)),
+        (Some(_), Some(_)) => Ok(None),
+        (None, None) => Err(anyhow!(
+            "There is no king on the field! The game encountered a critical error"
+        )),
     }
 }
