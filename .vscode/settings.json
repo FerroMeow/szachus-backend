@@ -5,7 +5,8 @@
     "jsonwebtoken",
     "rngs",
     "sqlx",
-    "szachus"
+    "szachus",
+    "Szachuś"
   ],
   "sqltools.connections": [
     {

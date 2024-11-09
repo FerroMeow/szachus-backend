@@ -15,9 +15,9 @@ pub struct UserCredentials {
     password: String,
 }
 
-struct PlayerEntity {
-    id: i32,
-    password_hash: String,
+pub(super) struct PlayerEntity {
+    pub id: i32,
+    pub password_hash: String,
 }
 
 pub async fn on_post(

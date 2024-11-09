@@ -1,12 +1,14 @@
 use axum::extract::FromRef;
 use dotenv::dotenv;
 use futures::lock::Mutex;
+use handlebars::Handlebars;
 use routes::game::MatchmakingState;
 use sqlx::{Pool, Postgres};
 use std::{collections::HashMap, env, fs, sync::Arc};
 
 mod error;
 mod routes;
+mod templates;
 
 #[derive(Clone)]
 struct GlobalState {
@@ -23,6 +25,7 @@ impl FromRef<ServerState> for GlobalState {
 struct ServerState {
     global: GlobalState,
     user_queue: MatchmakingState,
+    handlebars: Handlebars<'static>,
 }
 
 #[tokio::main]
@@ -41,6 +44,7 @@ async fn main() -> anyhow::Result<()> {
         routes::app_routes().with_state(ServerState {
             global: GlobalState { db_pool },
             user_queue: MatchmakingState(Arc::new(Mutex::new(HashMap::new()))),
+            handlebars: Handlebars::new(),
         }),
     )
     .await
