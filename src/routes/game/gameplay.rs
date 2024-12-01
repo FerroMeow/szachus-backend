@@ -33,8 +33,14 @@ pub async fn gameplay_loop(game: OpenGame) -> anyhow::Result<()> {
             PieceColor::Black
         };
         let (active_player, passive_player) = match is_firsts_turn {
-            true => (&game.user_stream.0, &game.user_stream.1),
-            false => (&game.user_stream.1, &game.user_stream.0),
+            true => (
+                &game.user_stream.white_player,
+                &game.user_stream.black_player,
+            ),
+            false => (
+                &game.user_stream.black_player,
+                &game.user_stream.white_player,
+            ),
         };
         active_player
             .0

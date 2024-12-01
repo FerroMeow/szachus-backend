@@ -16,7 +16,11 @@ use sqlx::{Pool, Postgres};
 
 use crate::{error, routes::user::jwt::Claims, GlobalState, ServerState};
 
-use super::{gameplay::gameplay_loop, rules::ChessBoard, MatchmakingState, OpenGame};
+use super::{
+    gameplay::gameplay_loop,
+    rules::{ChessBoard, PieceColor},
+    MatchmakingState, OpenGame, PlayerStreams,
+};
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Game {
@@ -39,10 +43,7 @@ pub async fn route_handler(
 #[derive(Serialize, Deserialize, Clone)]
 enum MatchmakingResponse {
     Searching,
-    Success {
-        game_data: Game,
-        game_board: ChessBoard,
-    },
+    Success { color: PieceColor },
 }
 
 async fn handle_ws(
@@ -108,35 +109,36 @@ async fn handle_ws(
         let open_game = OpenGame {
             game_data: game_data.clone(),
             chess_board: Arc::new(Mutex::new(chess_board)),
-            user_stream: (
-                (tx.clone(), rx.clone()),
-                (opponent_state.0.clone(), opponent_state.1),
-            ),
+            user_stream: PlayerStreams {
+                white_player: (opponent_state.0.clone(), opponent_state.1),
+                black_player: (tx.clone(), rx.clone()),
+            },
         };
         // Inform the clients of the new game
-        // Create successful matchmaking JSON response
-        let Ok(game_json) = serde_json::to_string(&MatchmakingResponse::Success {
-            game_board: open_game.chess_board.clone().lock().await.clone(),
-            game_data: open_game.game_data.clone(),
-        }) else {
-            return;
-        };
         // Send the JSON as text message to both players
-        let Ok(_) = join_all([tx.clone(), opponent_state.0.clone()].map(|tx| {
-            let game_json = game_json.clone();
-            async move {
-                tx.clone()
-                    .lock()
-                    .await
-                    .send(Message::Text(game_json))
-                    .await
-                    .map_err(|err| {
-                        println!("{:?}", err);
-                        err
+        let Ok(_) = [
+            tx.clone()
+                .lock()
+                .await
+                .send(Message::Text(
+                    serde_json::to_string(&MatchmakingResponse::Success {
+                        color: PieceColor::Black,
                     })
-            }
-        }))
-        .await
+                    .unwrap(),
+                ))
+                .await,
+            opponent_state
+                .0
+                .lock()
+                .await
+                .send(Message::Text(
+                    serde_json::to_string(&MatchmakingResponse::Success {
+                        color: PieceColor::White,
+                    })
+                    .unwrap(),
+                ))
+                .await,
+        ]
         .into_iter()
         .collect::<Result<Vec<()>, axum::Error>>() else {
             return;

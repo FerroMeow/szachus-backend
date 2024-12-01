@@ -37,10 +37,15 @@ type ArcMut<T> = Arc<Mutex<T>>;
 
 type SinkStream = (ArcMut<SplitSink>, ArcMut<SplitStream>);
 
+pub struct PlayerStreams {
+    pub white_player: SinkStream,
+    pub black_player: SinkStream,
+}
+
 pub struct OpenGame {
     pub game_data: Game,
     pub chess_board: Arc<Mutex<ChessBoard>>,
-    pub user_stream: (SinkStream, SinkStream),
+    pub user_stream: PlayerStreams,
 }
 
 pub fn routes() -> Router<ServerState> {
