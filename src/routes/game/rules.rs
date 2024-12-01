@@ -15,7 +15,7 @@ pub enum PieceType {
     Pawn,
 }
 
-#[derive(PartialEq, Clone, Serialize, Deserialize)]
+#[derive(PartialEq, Clone, Serialize, Deserialize, Debug)]
 pub enum PieceColor {
     White,
     Black,

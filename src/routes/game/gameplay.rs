@@ -7,7 +7,7 @@ use crate::routes::game::rules::PieceType;
 
 use super::{
     rules::{ChessBoard, PieceColor, Position},
-    OpenGame,
+    OpenGame, WsMsg,
 };
 
 #[derive(Deserialize)]
@@ -17,10 +17,10 @@ pub struct ChessMove {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-enum GameMessage<'a> {
+pub(crate) enum GameMessage {
     NewTurn(bool),
-    Error(&'a str),
-    Notification(&'a str),
+    Error(String),
+    Notification(String),
     GameEnd(bool),
 }
 
@@ -46,17 +46,17 @@ pub async fn gameplay_loop(game: OpenGame) -> anyhow::Result<()> {
             .0
             .lock()
             .await
-            .send(Message::Text(serde_json::to_string(
-                &GameMessage::NewTurn(true),
-            )?))
+            .send(Message::Text(serde_json::to_string(&WsMsg::Game(
+                GameMessage::NewTurn(true),
+            ))?))
             .await?;
         passive_player
             .0
             .lock()
             .await
-            .send(Message::Text(serde_json::to_string(
-                &GameMessage::NewTurn(false),
-            )?))
+            .send(Message::Text(serde_json::to_string(&WsMsg::Game(
+                GameMessage::NewTurn(false),
+            ))?))
             .await?;
 
         loop {
@@ -65,8 +65,8 @@ pub async fn gameplay_loop(game: OpenGame) -> anyhow::Result<()> {
                     .0
                     .lock()
                     .await
-                    .send(Message::Text(serde_json::to_string(&GameMessage::Error(
-                        "The message is not a valid string!",
+                    .send(Message::Text(serde_json::to_string(&WsMsg::Game(
+                        GameMessage::Error("The message is not a valid string!".into()),
                     ))?))
                     .await?;
                 bail!("Bad message error");
@@ -76,8 +76,8 @@ pub async fn gameplay_loop(game: OpenGame) -> anyhow::Result<()> {
                     .0
                     .lock()
                     .await
-                    .send(Message::Text(serde_json::to_string(&GameMessage::Error(
-                        "The message is not a valid move!",
+                    .send(Message::Text(serde_json::to_string(&WsMsg::Game(
+                        GameMessage::Error("The message is not a valid move!".into()),
                     ))?))
                     .await?;
                 continue;
@@ -94,8 +94,8 @@ pub async fn gameplay_loop(game: OpenGame) -> anyhow::Result<()> {
                     .0
                     .lock()
                     .await
-                    .send(Message::Text(serde_json::to_string(&GameMessage::Error(
-                        "You don't have a piece at this position!",
+                    .send(Message::Text(serde_json::to_string(&WsMsg::Game(
+                        GameMessage::Error("You don't have a piece at this position!".into()),
                     ))?))
                     .await?;
                 continue;
@@ -109,8 +109,8 @@ pub async fn gameplay_loop(game: OpenGame) -> anyhow::Result<()> {
                     .0
                     .lock()
                     .await
-                    .send(Message::Text(serde_json::to_string(&GameMessage::Error(
-                        &error.to_string(),
+                    .send(Message::Text(serde_json::to_string(&WsMsg::Game(
+                        GameMessage::Error(error.to_string()),
                     ))?))
                     .await?;
                 continue;
@@ -119,9 +119,9 @@ pub async fn gameplay_loop(game: OpenGame) -> anyhow::Result<()> {
                 .0
                 .lock()
                 .await
-                .send(Message::Text(serde_json::to_string(
-                    &GameMessage::Notification("Moved correctly"),
-                )?))
+                .send(Message::Text(serde_json::to_string(&WsMsg::Game(
+                    GameMessage::Notification("Moved correctly".into()),
+                ))?))
                 .await?;
             break;
         }
@@ -135,17 +135,17 @@ pub async fn gameplay_loop(game: OpenGame) -> anyhow::Result<()> {
                 .0
                 .lock()
                 .await
-                .send(Message::Text(serde_json::to_string(
-                    &GameMessage::GameEnd(true),
-                )?))
+                .send(Message::Text(serde_json::to_string(&WsMsg::Game(
+                    GameMessage::GameEnd(true),
+                ))?))
                 .await?;
             loser
                 .0
                 .lock()
                 .await
-                .send(Message::Text(serde_json::to_string(
-                    &GameMessage::GameEnd(false),
-                )?))
+                .send(Message::Text(serde_json::to_string(&WsMsg::Game(
+                    GameMessage::GameEnd(false),
+                ))?))
                 .await?;
             return Ok(());
         };

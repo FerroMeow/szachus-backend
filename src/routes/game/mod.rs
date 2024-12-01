@@ -9,8 +9,10 @@ use axum::{
     Router,
 };
 use futures::{lock::Mutex, stream};
-use matchmaking::Game;
+use gameplay::GameMessage;
+use matchmaking::{Game, MatchmakingResponse};
 use rules::ChessBoard;
+use serde::{Deserialize, Serialize};
 use tokio::task::JoinHandle;
 
 use crate::ServerState;
@@ -36,6 +38,12 @@ impl FromRef<ServerState> for MatchmakingState {
 type ArcMut<T> = Arc<Mutex<T>>;
 
 type SinkStream = (ArcMut<SplitSink>, ArcMut<SplitStream>);
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) enum WsMsg {
+    Matchmaking(MatchmakingResponse),
+    Game(GameMessage),
+}
 
 pub struct PlayerStreams {
     pub white_player: SinkStream,

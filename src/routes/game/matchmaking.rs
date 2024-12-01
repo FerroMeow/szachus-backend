@@ -14,7 +14,11 @@ use futures::{lock::Mutex, SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Postgres};
 
-use crate::{error, routes::user::jwt::Claims, GlobalState, ServerState};
+use crate::{
+    error,
+    routes::{game::WsMsg, user::jwt::Claims},
+    GlobalState, ServerState,
+};
 
 use super::{
     gameplay::gameplay_loop,
@@ -40,8 +44,8 @@ pub async fn route_handler(
     ws.on_upgrade(|socket: WebSocket| handle_ws(global_state, socket, queue_state))
 }
 
-#[derive(Serialize, Deserialize, Clone)]
-enum MatchmakingResponse {
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub(crate) enum MatchmakingResponse {
     Searching,
     Success { color: PieceColor },
 }
@@ -77,7 +81,7 @@ async fn handle_ws(
                 .lock()
                 .await
                 .send(Message::Text(
-                    serde_json::to_string(&MatchmakingResponse::Searching)
+                    serde_json::to_string(&WsMsg::Matchmaking(MatchmakingResponse::Searching))
                         .unwrap_or("".to_string()),
                 ))
                 .await;
@@ -121,9 +125,9 @@ async fn handle_ws(
                 .lock()
                 .await
                 .send(Message::Text(
-                    serde_json::to_string(&MatchmakingResponse::Success {
+                    serde_json::to_string(&WsMsg::Matchmaking(MatchmakingResponse::Success {
                         color: PieceColor::Black,
-                    })
+                    }))
                     .unwrap(),
                 ))
                 .await,
@@ -132,9 +136,9 @@ async fn handle_ws(
                 .lock()
                 .await
                 .send(Message::Text(
-                    serde_json::to_string(&MatchmakingResponse::Success {
+                    serde_json::to_string(&WsMsg::Matchmaking(MatchmakingResponse::Success {
                         color: PieceColor::White,
-                    })
+                    }))
                     .unwrap(),
                 ))
                 .await,
