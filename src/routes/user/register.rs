@@ -17,7 +17,6 @@ pub async fn on_register(
     State(global_state): State<GlobalState>,
     Json(user_data): Json<UserData>,
 ) -> error::Result<Json<serde_json::Value>> {
-    println!("On register fires");
     let jwt = create_user(&global_state.db_pool, &user_data).await?;
     Ok(Json(json!({
         "jwt": jwt

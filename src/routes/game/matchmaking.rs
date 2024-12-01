@@ -14,11 +14,7 @@ use futures::{future::join_all, lock::Mutex, SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Postgres};
 
-use crate::{
-    error,
-    routes::user::{self, jwt::Claims},
-    GlobalState, ServerState,
-};
+use crate::{error, routes::user::jwt::Claims, GlobalState, ServerState};
 
 use super::{gameplay::gameplay_loop, rules::ChessBoard, MatchmakingState, OpenGame};
 
@@ -57,24 +53,24 @@ async fn handle_ws(
     let (tx, rx) = socket.split();
     let (tx, rx) = (Arc::new(Mutex::new(tx)), Arc::new(Mutex::new(rx)));
 
+    // Await authentication
     let Some(Ok(Message::Text(jwt_str))) = rx.lock().await.next().await else {
         return;
     };
+    // Check if the claims are correct
     let Ok(claims) = Claims::try_from(jwt_str) else {
         return;
     };
 
-    println!("{:?}", claims);
-
-    let users_in_queue = user_queue
-        .lock()
-        .await
-        .iter()
-        .find(|(id, _)| **id != claims.sub)
-        .map(|(id, tx)| (*id, tx.clone()));
+    // create an on_message handler
     let (echo_tx, echo_rx) = (tx.clone(), rx.clone());
+    let echo_user_queue = user_queue.clone();
     let echo_task = Arc::new(tokio::spawn(async move {
-        while let Some(Ok(_)) = echo_rx.clone().lock().await.next().await {
+        while let Some(Ok(message)) = echo_rx.clone().lock().await.next().await {
+            if let Message::Close(_) = message {
+                echo_user_queue.lock().await.remove(&claims.sub);
+                return;
+            }
             let _ = echo_tx
                 .clone()
                 .lock()
@@ -87,7 +83,22 @@ async fn handle_ws(
             println!("Response sent");
         }
     }));
+
+    // Insert this user into the queue with send, receive, and on_message handler
+    user_queue
+        .clone()
+        .lock()
+        .await
+        .insert(claims.sub, (tx.clone(), rx.clone(), echo_task.clone()));
+    // check if we have 2 players. if so, start game.
+    let users_in_queue = user_queue
+        .lock()
+        .await
+        .iter()
+        .find(|(id, _)| **id != claims.sub)
+        .map(|(id, tx)| (*id, tx.clone()));
     if let Some((opponent_id, opponent_state)) = users_in_queue {
+        // Found 2 users, generating new game
         let Ok(game_data) = create_game(&db_pool, claims.sub, opponent_id).await else {
             return;
         };
@@ -102,12 +113,15 @@ async fn handle_ws(
                 (opponent_state.0.clone(), opponent_state.1),
             ),
         };
+        // Inform the clients of the new game
+        // Create successful matchmaking JSON response
         let Ok(game_json) = serde_json::to_string(&MatchmakingResponse::Success {
             game_board: open_game.chess_board.clone().lock().await.clone(),
             game_data: open_game.game_data.clone(),
         }) else {
             return;
         };
+        // Send the JSON as text message to both players
         let Ok(_) = join_all([tx.clone(), opponent_state.0.clone()].map(|tx| {
             let game_json = game_json.clone();
             async move {
@@ -127,19 +141,15 @@ async fn handle_ws(
         .collect::<Result<Vec<()>, axum::Error>>() else {
             return;
         };
-        let game_echo_task = echo_task.clone();
+        // Start the game :D
         let _ = tokio::spawn(async move {
+            // Stop the echo services
             opponent_state.2.abort();
-            game_echo_task.abort();
+            echo_task.abort();
             gameplay_loop(open_game).await
         })
         .await;
     }
-    user_queue
-        .clone()
-        .lock()
-        .await
-        .insert(claims.sub, (tx.clone(), rx.clone(), echo_task.clone()));
 }
 
 async fn create_game(
