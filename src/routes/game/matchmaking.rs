@@ -10,7 +10,7 @@ use axum::{
 };
 
 use chrono::prelude::*;
-use futures::{future::join_all, lock::Mutex, SinkExt, StreamExt};
+use futures::{lock::Mutex, SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Postgres};
 
