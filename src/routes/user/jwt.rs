@@ -20,19 +20,11 @@ pub struct Claims {
     pub sub: i32,    // Optional. Subject (whom token refers to)
 }
 
-#[async_trait]
-impl<S> FromRequestParts<S> for Claims
-where
-    S: Send + Sync,
-{
-    type Rejection = StatusCode;
+impl TryFrom<String> for Claims {
+    type Error = anyhow::Error;
 
-    async fn from_request_parts(parts: &mut Parts, _: &S) -> Result<Self, Self::Rejection> {
-        let TypedHeader(Authorization(bearer)) = parts
-            .extract::<TypedHeader<Authorization<Bearer>>>()
-            .await
-            .map_err(|_| StatusCode::UNAUTHORIZED)?;
-        parse_token(bearer.token()).map_err(|_| StatusCode::UNAUTHORIZED)
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        parse_token(&value)
     }
 }
 

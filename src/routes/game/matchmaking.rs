@@ -36,9 +36,8 @@ pub async fn route_handler(
     ws: WebSocketUpgrade,
     State(queue_state): State<MatchmakingState>,
     State(global_state): State<GlobalState>,
-    claims: user::jwt::Claims,
 ) -> Response {
-    ws.on_upgrade(|socket: WebSocket| handle_ws(global_state, claims, socket, queue_state))
+    ws.on_upgrade(|socket: WebSocket| handle_ws(global_state, socket, queue_state))
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -52,13 +51,21 @@ enum MatchmakingResponse {
 
 async fn handle_ws(
     GlobalState { db_pool }: GlobalState,
-    claims: Claims,
     socket: WebSocket,
     MatchmakingState(user_queue): MatchmakingState,
 ) {
     let (tx, rx) = socket.split();
-
     let (tx, rx) = (Arc::new(Mutex::new(tx)), Arc::new(Mutex::new(rx)));
+
+    let Some(Ok(Message::Text(jwt_str))) = rx.lock().await.next().await else {
+        return;
+    };
+    let Ok(claims) = Claims::try_from(jwt_str) else {
+        return;
+    };
+
+    println!("{:?}", claims);
+
     let users_in_queue = user_queue
         .lock()
         .await

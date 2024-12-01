@@ -2,7 +2,6 @@ use core::str;
 
 use axum::{
     extract::State,
-    middleware,
     response::{Html, IntoResponse},
     routing::get,
     Router,
@@ -17,7 +16,6 @@ mod user;
 pub fn app_routes() -> Router<ServerState> {
     Router::new()
         .nest("/game", game::routes())
-        .layer(middleware::from_extractor::<user::jwt::Claims>())
         .route("/", get(start_page))
         .nest("/user", user::authentication_routes())
         .fallback_service(ServeDir::new("public").not_found_service(get(no_route_error)))

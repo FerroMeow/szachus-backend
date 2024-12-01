@@ -37,6 +37,9 @@ async function onLogin(e) {
   }
   localStorage.setItem("jwt", result.jwt);
   document.dispatchEvent(new Event("szachus-init"));
+  const form = document.getElementById("login-form");
+  form.style.display = "none";
+  form.removeEventListener("submit", onLogin);
 }
 
 document.addEventListener("szachus-init", szachusInit);
@@ -44,5 +47,7 @@ document.addEventListener("szachus-init", szachusInit);
 if (typeof window.localStorage?.getItem("jwt") === "string") {
   document.dispatchEvent(new Event("szachus-init"));
 } else {
-  document.getElementById("login-form").addEventListener("submit", onLogin);
+  const form = document.getElementById("login-form");
+  form.style.removeProperty("display");
+  form.addEventListener("submit", onLogin);
 }
