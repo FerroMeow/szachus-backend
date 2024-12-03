@@ -19,6 +19,7 @@ pub struct ChessMove {
 #[derive(Deserialize)]
 pub(crate) enum GameMsgRecv {
     TurnEnd(ChessMove),
+    Ack,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -30,19 +31,67 @@ pub(crate) enum GameMessage {
 }
 
 pub async fn gameplay_loop(game: OpenGame) -> anyhow::Result<()> {
+    // Wait for both players to acknowledge their involvement
+    let white_ack = &game
+        .user_stream
+        .white_player
+        .1
+        .lock()
+        .await
+        .next()
+        .await
+        .and_then(|v| {
+            v.ok()
+                .and_then(|msg| match msg {
+                    Message::Text(text) => Some(text),
+                    _ => None,
+                })
+                .and_then(|text| {
+                    serde_json::from_str::<GameMsgRecv>(&text)
+                        .ok()
+                        .and_then(|msg| match msg {
+                            GameMsgRecv::Ack => Some(()),
+                            _ => None,
+                        })
+                })
+        });
+    let black_ack = &game
+        .user_stream
+        .black_player
+        .1
+        .lock()
+        .await
+        .next()
+        .await
+        .and_then(|v| {
+            v.ok()
+                .and_then(|msg| match msg {
+                    Message::Text(text) => Some(text),
+                    _ => None,
+                })
+                .and_then(|text| {
+                    serde_json::from_str::<GameMsgRecv>(&text)
+                        .ok()
+                        .and_then(|msg| match msg {
+                            GameMsgRecv::Ack => Some(()),
+                            _ => None,
+                        })
+                })
+        });
+    if white_ack.is_none() && black_ack.is_none() {
+        anyhow::bail!("Not received ack!");
+    }
     let mut is_firsts_turn = true;
     loop {
-        let active_color = if is_firsts_turn {
-            PieceColor::White
-        } else {
-            PieceColor::Black
-        };
-        let (active_player, passive_player) = match is_firsts_turn {
+        println!("Is first turn: {is_firsts_turn}");
+        let (active_color, active_player, passive_player) = match is_firsts_turn {
             true => (
+                PieceColor::White,
                 &game.user_stream.white_player,
                 &game.user_stream.black_player,
             ),
             false => (
+                PieceColor::Black,
                 &game.user_stream.black_player,
                 &game.user_stream.white_player,
             ),
@@ -55,6 +104,7 @@ pub async fn gameplay_loop(game: OpenGame) -> anyhow::Result<()> {
                 GameMessage::NewTurn(true),
             ))?))
             .await?;
+        println!("Sent the active turn to the player");
         passive_player
             .0
             .lock()
@@ -63,8 +113,8 @@ pub async fn gameplay_loop(game: OpenGame) -> anyhow::Result<()> {
                 GameMessage::NewTurn(false),
             ))?))
             .await?;
-
-        loop {
+        println!("Sent the passive turn to the player");
+        let player_msg = loop {
             let Some(Ok(Message::Text(message))) = active_player.1.lock().await.next().await else {
                 active_player
                     .0
@@ -87,55 +137,54 @@ pub async fn gameplay_loop(game: OpenGame) -> anyhow::Result<()> {
                     .await?;
                 continue;
             };
-            match player_msg {
-                GameMsgRecv::TurnEnd(player_move) => {
-                    let Some(mut chess_piece) = game
-                        .chess_board
-                        .clone()
-                        .lock()
-                        .await
-                        .find_own_piece_at(&player_move.position_from, active_color.clone())
-                        .cloned()
-                    else {
-                        active_player
-                            .0
-                            .lock()
-                            .await
-                            .send(Message::Text(serde_json::to_string(&WsMsg::Game(
-                                GameMessage::Error(
-                                    "You don't have a piece at this position!".into(),
-                                ),
-                            ))?))
-                            .await?;
-                        continue;
-                    };
-
-                    if let Err(error) = chess_piece
-                        .move_piece_to(game.chess_board.clone(), player_move.position_to)
-                        .await
-                    {
-                        active_player
-                            .0
-                            .lock()
-                            .await
-                            .send(Message::Text(serde_json::to_string(&WsMsg::Game(
-                                GameMessage::Error(error.to_string()),
-                            ))?))
-                            .await?;
-                        continue;
-                    };
+            break player_msg;
+        };
+        match player_msg {
+            GameMsgRecv::TurnEnd(player_move) => {
+                let Some(mut chess_piece) = game
+                    .chess_board
+                    .clone()
+                    .lock()
+                    .await
+                    .find_own_piece_at(&player_move.position_from, active_color.clone())
+                    .cloned()
+                else {
                     active_player
                         .0
                         .lock()
                         .await
                         .send(Message::Text(serde_json::to_string(&WsMsg::Game(
-                            GameMessage::Notification("Moved correctly".into()),
+                            GameMessage::Error("You don't have a piece at this position!".into()),
                         ))?))
                         .await?;
-                    break;
-                }
-            };
-        }
+                    continue;
+                };
+
+                if let Err(error) = chess_piece
+                    .move_piece_to(game.chess_board.clone(), player_move.position_to)
+                    .await
+                {
+                    active_player
+                        .0
+                        .lock()
+                        .await
+                        .send(Message::Text(serde_json::to_string(&WsMsg::Game(
+                            GameMessage::Error(error.to_string()),
+                        ))?))
+                        .await?;
+                    continue;
+                };
+                active_player
+                    .0
+                    .lock()
+                    .await
+                    .send(Message::Text(serde_json::to_string(&WsMsg::Game(
+                        GameMessage::Notification("Moved correctly".into()),
+                    ))?))
+                    .await?;
+            }
+            GameMsgRecv::Ack => (),
+        };
         if let Some(winning_color) = check_win_condition(&game.chess_board).await? {
             let (winner, loser) = if active_color == winning_color {
                 (active_player, passive_player)
@@ -158,9 +207,11 @@ pub async fn gameplay_loop(game: OpenGame) -> anyhow::Result<()> {
                     GameMessage::GameEnd(false),
                 ))?))
                 .await?;
+            println!("Win!");
             return Ok(());
         };
         is_firsts_turn = !is_firsts_turn;
+        println!("Changed the is_firsts_turn!");
     }
 }
 

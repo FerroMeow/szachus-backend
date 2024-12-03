@@ -60,12 +60,18 @@ async fn handle_ws(
 
     // Await authentication
     let Some(Ok(Message::Text(jwt_str))) = rx.lock().await.next().await else {
+        println!("Returning, invalid jwt str");
         return;
     };
     // Check if the claims are correct
-    let Ok(claims) = Claims::try_from(jwt_str) else {
-        return;
+    let claims = match Claims::try_from(jwt_str) {
+        Ok(claims) => claims,
+        Err(error_val) => {
+            println!("Returning, invalid JWT error: {}", error_val);
+            return;
+        }
     };
+    println!("JWT authenticated, beginning transmission!");
 
     // create an on_message handler
     let (echo_tx, echo_rx) = (tx.clone(), rx.clone());

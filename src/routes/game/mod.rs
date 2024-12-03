@@ -37,6 +37,7 @@ impl FromRef<ServerState> for MatchmakingState {
 
 type ArcMut<T> = Arc<Mutex<T>>;
 
+// txc, rx
 type SinkStream = (ArcMut<SplitSink>, ArcMut<SplitStream>);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -45,6 +46,7 @@ pub(crate) enum WsMsg {
     Game(GameMessage),
 }
 
+// player tx, rx
 pub struct PlayerStreams {
     pub white_player: SinkStream,
     pub black_player: SinkStream,
