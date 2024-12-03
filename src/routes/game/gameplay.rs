@@ -10,13 +10,13 @@ use super::{
     OpenGame, WsMsg,
 };
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct ChessMove {
     position_from: Position,
     position_to: Position,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub(crate) enum GameMsgRecv {
     TurnEnd(ChessMove),
     Ack,
@@ -83,7 +83,6 @@ pub async fn gameplay_loop(game: OpenGame) -> anyhow::Result<()> {
     }
     let mut is_firsts_turn = true;
     loop {
-        println!("Is first turn: {is_firsts_turn}");
         let (active_color, active_player, passive_player) = match is_firsts_turn {
             true => (
                 PieceColor::White,
@@ -104,7 +103,6 @@ pub async fn gameplay_loop(game: OpenGame) -> anyhow::Result<()> {
                 GameMessage::NewTurn(true),
             ))?))
             .await?;
-        println!("Sent the active turn to the player");
         passive_player
             .0
             .lock()
@@ -113,9 +111,9 @@ pub async fn gameplay_loop(game: OpenGame) -> anyhow::Result<()> {
                 GameMessage::NewTurn(false),
             ))?))
             .await?;
-        println!("Sent the passive turn to the player");
         let player_msg = loop {
-            let Some(Ok(Message::Text(message))) = active_player.1.lock().await.next().await else {
+            let ws_msg = active_player.1.lock().await.next().await;
+            let Some(Ok(Message::Text(message))) = ws_msg else {
                 active_player
                     .0
                     .lock()
@@ -126,7 +124,8 @@ pub async fn gameplay_loop(game: OpenGame) -> anyhow::Result<()> {
                     .await?;
                 bail!("Bad message error");
             };
-            let Ok(player_msg) = serde_json::from_str::<GameMsgRecv>(&message) else {
+            let ws_msg_struct = serde_json::from_str::<GameMsgRecv>(&message);
+            let Ok(player_msg) = ws_msg_struct else {
                 active_player
                     .0
                     .lock()
@@ -141,13 +140,10 @@ pub async fn gameplay_loop(game: OpenGame) -> anyhow::Result<()> {
         };
         match player_msg {
             GameMsgRecv::TurnEnd(player_move) => {
-                let Some(mut chess_piece) = game
-                    .chess_board
-                    .clone()
-                    .lock()
-                    .await
+                let chess_board_arc = game.chess_board.clone();
+                let mut chess_board_mutex = chess_board_arc.lock().await;
+                let Some(chess_piece) = chess_board_mutex
                     .find_own_piece_at(&player_move.position_from, active_color.clone())
-                    .cloned()
                 else {
                     active_player
                         .0
@@ -159,8 +155,10 @@ pub async fn gameplay_loop(game: OpenGame) -> anyhow::Result<()> {
                         .await?;
                     continue;
                 };
-
+                drop(chess_board_mutex);
                 if let Err(error) = chess_piece
+                    .lock()
+                    .await
                     .move_piece_to(game.chess_board.clone(), player_move.position_to)
                     .await
                 {
@@ -207,11 +205,9 @@ pub async fn gameplay_loop(game: OpenGame) -> anyhow::Result<()> {
                     GameMessage::GameEnd(false),
                 ))?))
                 .await?;
-            println!("Win!");
             return Ok(());
         };
         is_firsts_turn = !is_firsts_turn;
-        println!("Changed the is_firsts_turn!");
     }
 }
 
@@ -223,12 +219,18 @@ async fn check_win_condition(
         let white_king = board_lock
             .pieces
             .iter()
-            .find(|piece| piece.color == PieceColor::White && piece.piece_type == PieceType::King)
+            .find(|piece| {
+                piece.try_lock().unwrap().color == PieceColor::White
+                    && piece.try_lock().unwrap().piece_type == PieceType::King
+            })
             .cloned();
         let black_king = board_lock
             .pieces
             .iter()
-            .find(|piece| piece.color == PieceColor::Black && piece.piece_type == PieceType::King)
+            .find(|piece| {
+                piece.try_lock().unwrap().color == PieceColor::Black
+                    && piece.try_lock().unwrap().piece_type == PieceType::King
+            })
             .cloned();
         (white_king, black_king)
     };

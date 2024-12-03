@@ -5,7 +5,9 @@ use futures::lock::Mutex;
 use rust_decimal::prelude::Zero;
 use serde::{Deserialize, Serialize};
 
-#[derive(PartialEq, Clone, Serialize, Deserialize)]
+use super::ArcMut;
+
+#[derive(PartialEq, Clone, Serialize, Deserialize, Debug)]
 pub enum PieceType {
     Rook,
     Knight,
@@ -21,7 +23,7 @@ pub enum PieceColor {
     Black,
 }
 
-#[derive(PartialEq, Clone, Serialize, Deserialize)]
+#[derive(PartialEq, Clone, Serialize, Deserialize, Debug)]
 pub struct Row(u8);
 
 impl Row {
@@ -45,7 +47,7 @@ impl std::ops::Add for Row {
     }
 }
 
-#[derive(PartialEq, Clone, Serialize, Deserialize)]
+#[derive(PartialEq, Clone, Serialize, Deserialize, Debug)]
 pub struct Column(u8);
 
 impl Column {
@@ -69,7 +71,7 @@ impl std::ops::Add for Column {
     }
 }
 
-#[derive(PartialEq, Clone, Serialize, Deserialize)]
+#[derive(PartialEq, Clone, Serialize, Deserialize, Debug)]
 pub struct Position {
     row: Row,
     column: Column,
@@ -89,13 +91,13 @@ impl std::ops::Sub for Position {
 
     fn sub(self, rhs: Self) -> Self::Output {
         (
-            self.row.0 as i8 - rhs.row.0 as i8,
-            self.column.0 as i8 - rhs.column.0 as i8,
+            (self.row.0 as i8 - rhs.row.0 as i8).abs(),
+            (self.column.0 as i8 - rhs.column.0 as i8).abs(),
         )
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct Piece {
     pub piece_type: PieceType,
     pub color: PieceColor,
@@ -124,9 +126,9 @@ impl Piece {
         game: Arc<Mutex<ChessBoard>>,
         new_position: Position,
     ) -> anyhow::Result<()> {
-        let mut position_difference = new_position.clone() - self.position.clone();
+        let position_difference = new_position.clone() - self.position.clone();
         if let PieceColor::Black = self.color {
-            position_difference.0 *= -1;
+            // position_difference.0 *= -1;
         };
         match self.piece_type {
             PieceType::Pawn => {
@@ -330,9 +332,9 @@ impl Piece {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug)]
 pub struct ChessBoard {
-    pub pieces: Vec<Piece>,
+    pub pieces: Vec<ArcMut<Piece>>,
 }
 
 impl ChessBoard {
@@ -360,36 +362,48 @@ impl ChessBoard {
             .collect::<Result<Vec<_>, _>>()?
             .into_iter()
             .flatten()
+            .map(|p| Arc::new(Mutex::new(p)))
             .collect::<Vec<_>>();
         Ok(Self { pieces })
     }
 
-    pub fn find_piece_at(&self, position: &Position) -> Option<&Piece> {
-        self.pieces
-            .iter()
-            .find(move |piece| piece.position == *position)
+    pub fn find_piece_at(&self, position: &Position) -> Option<&ArcMut<Piece>> {
+        self.pieces.iter().find(move |piece| {
+            piece
+                .try_lock()
+                .map(|piece| piece.position == *position)
+                .unwrap_or(false)
+        })
     }
 
-    pub fn find_own_piece_at(&self, position: &Position, color: PieceColor) -> Option<&Piece> {
+    pub fn find_own_piece_at(
+        &mut self,
+        position: &Position,
+        color: PieceColor,
+    ) -> Option<ArcMut<Piece>> {
         self.pieces
             .iter()
-            .find(move |piece| piece.position == *position && piece.color == color)
+            .find(move |piece| {
+                piece.try_lock().unwrap().position == *position
+                    && piece.try_lock().unwrap().color == color
+            })
+            .cloned()
     }
 
     pub fn remove_piece_at(
         &mut self,
         position: &Position,
         color: &PieceColor,
-    ) -> anyhow::Result<Option<Piece>> {
+    ) -> anyhow::Result<Option<ArcMut<Piece>>> {
         let Some(position) = self
             .pieces
             .iter()
-            .position(move |piece| piece.position == *position)
+            .position(move |piece| piece.try_lock().unwrap().position == *position)
         else {
             bail!("piece not found at the new position");
         };
         if let Some(pawn) = self.pieces.get(position) {
-            if pawn.color == *color {
+            if pawn.try_lock().unwrap().color == *color {
                 return Ok(None);
             }
         } else {
