@@ -16,6 +16,11 @@ pub struct ChessMove {
     position_to: Position,
 }
 
+#[derive(Deserialize)]
+pub(crate) enum GameMsgRecv {
+    TurnEnd(ChessMove),
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) enum GameMessage {
     NewTurn(bool),
@@ -71,7 +76,7 @@ pub async fn gameplay_loop(game: OpenGame) -> anyhow::Result<()> {
                     .await?;
                 bail!("Bad message error");
             };
-            let Ok(player_move) = serde_json::from_str::<ChessMove>(&message) else {
+            let Ok(player_msg) = serde_json::from_str::<GameMsgRecv>(&message) else {
                 active_player
                     .0
                     .lock()
@@ -82,48 +87,54 @@ pub async fn gameplay_loop(game: OpenGame) -> anyhow::Result<()> {
                     .await?;
                 continue;
             };
-            let Some(mut chess_piece) = game
-                .chess_board
-                .clone()
-                .lock()
-                .await
-                .find_own_piece_at(&player_move.position_from, active_color.clone())
-                .cloned()
-            else {
-                active_player
-                    .0
-                    .lock()
-                    .await
-                    .send(Message::Text(serde_json::to_string(&WsMsg::Game(
-                        GameMessage::Error("You don't have a piece at this position!".into()),
-                    ))?))
-                    .await?;
-                continue;
-            };
+            match player_msg {
+                GameMsgRecv::TurnEnd(player_move) => {
+                    let Some(mut chess_piece) = game
+                        .chess_board
+                        .clone()
+                        .lock()
+                        .await
+                        .find_own_piece_at(&player_move.position_from, active_color.clone())
+                        .cloned()
+                    else {
+                        active_player
+                            .0
+                            .lock()
+                            .await
+                            .send(Message::Text(serde_json::to_string(&WsMsg::Game(
+                                GameMessage::Error(
+                                    "You don't have a piece at this position!".into(),
+                                ),
+                            ))?))
+                            .await?;
+                        continue;
+                    };
 
-            if let Err(error) = chess_piece
-                .move_piece_to(game.chess_board.clone(), player_move.position_to)
-                .await
-            {
-                active_player
-                    .0
-                    .lock()
-                    .await
-                    .send(Message::Text(serde_json::to_string(&WsMsg::Game(
-                        GameMessage::Error(error.to_string()),
-                    ))?))
-                    .await?;
-                continue;
+                    if let Err(error) = chess_piece
+                        .move_piece_to(game.chess_board.clone(), player_move.position_to)
+                        .await
+                    {
+                        active_player
+                            .0
+                            .lock()
+                            .await
+                            .send(Message::Text(serde_json::to_string(&WsMsg::Game(
+                                GameMessage::Error(error.to_string()),
+                            ))?))
+                            .await?;
+                        continue;
+                    };
+                    active_player
+                        .0
+                        .lock()
+                        .await
+                        .send(Message::Text(serde_json::to_string(&WsMsg::Game(
+                            GameMessage::Notification("Moved correctly".into()),
+                        ))?))
+                        .await?;
+                    break;
+                }
             };
-            active_player
-                .0
-                .lock()
-                .await
-                .send(Message::Text(serde_json::to_string(&WsMsg::Game(
-                    GameMessage::Notification("Moved correctly".into()),
-                ))?))
-                .await?;
-            break;
         }
         if let Some(winning_color) = check_win_condition(&game.chess_board).await? {
             let (winner, loser) = if active_color == winning_color {
