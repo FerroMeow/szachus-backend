@@ -392,11 +392,11 @@ impl ChessBoard {
         position: &Position,
         color: &PieceColor,
     ) -> anyhow::Result<Option<ArcMut<Piece>>> {
-        let Some(position) = self
-            .pieces
-            .iter()
-            .position(move |piece| piece.try_lock().unwrap().position == *position)
-        else {
+        let Some(position) = self.pieces.iter().position(move |piece| {
+            piece
+                .try_lock()
+                .map_or(false, |piece| piece.position == *position)
+        }) else {
             bail!("piece not found at the new position");
         };
         if let Some(pawn) = self.pieces.get(position) {
