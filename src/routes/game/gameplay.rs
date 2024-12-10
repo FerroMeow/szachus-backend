@@ -181,7 +181,6 @@ pub async fn gameplay_loop(game: OpenGame) -> anyhow::Result<()> {
                         GameMessage::Notification("Moved correctly".into()),
                     ))?))
                     .await?;
-                println!("Sending info to the next player about the opponent move...");
                 if let Err(err) = passive_player
                     .0
                     .lock()
@@ -193,7 +192,6 @@ pub async fn gameplay_loop(game: OpenGame) -> anyhow::Result<()> {
                 {
                     println!("{:?}", err);
                 };
-                println!("Sent to passive player correctly...");
             }
             GameMsgRecv::Ack => (),
         };
