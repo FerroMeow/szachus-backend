@@ -124,7 +124,7 @@ impl Piece {
     pub async fn move_piece_to(
         &mut self,
         game: Arc<Mutex<ChessBoard>>,
-        new_position: Position,
+        new_position: &Position,
     ) -> anyhow::Result<()> {
         let position_difference = new_position.clone() - self.position.clone();
         if let PieceColor::Black = self.color {
@@ -150,11 +150,8 @@ impl Piece {
                 {
                     bail!("Incorrect knight move!");
                 }
-                let _ = game
-                    .lock()
-                    .await
-                    .remove_piece_at(&new_position, &self.color);
-                self.position = new_position;
+                let _ = game.lock().await.remove_piece_at(new_position, &self.color);
+                self.position = new_position.clone();
             }
             PieceType::King => {
                 if !(position_difference.0.abs() <= 1 && position_difference.1.abs() <= 1) {
@@ -164,8 +161,8 @@ impl Piece {
                     .clone()
                     .lock()
                     .await
-                    .remove_piece_at(&new_position, &self.color);
-                self.position = new_position;
+                    .remove_piece_at(new_position, &self.color);
+                self.position = new_position.clone();
             }
             PieceType::Rook => {
                 self.rook_move(new_position.clone(), position_difference, game.clone())
@@ -174,8 +171,8 @@ impl Piece {
                     .clone()
                     .lock()
                     .await
-                    .remove_piece_at(&new_position, &self.color);
-                self.position = new_position;
+                    .remove_piece_at(new_position, &self.color);
+                self.position = new_position.clone();
             }
             PieceType::Bishop => {
                 self.bishop_move(new_position.clone(), position_difference, game.clone())
@@ -184,8 +181,8 @@ impl Piece {
                     .clone()
                     .lock()
                     .await
-                    .remove_piece_at(&new_position, &self.color);
-                self.position = new_position;
+                    .remove_piece_at(new_position, &self.color);
+                self.position = new_position.clone();
             }
             PieceType::Queen => {
                 let move_successful = [
@@ -203,8 +200,8 @@ impl Piece {
                     .clone()
                     .lock()
                     .await
-                    .remove_piece_at(&new_position, &self.color);
-                self.position = new_position;
+                    .remove_piece_at(new_position, &self.color);
+                self.position = new_position.clone();
             }
         };
         self.times_moved += 1;

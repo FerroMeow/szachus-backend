@@ -10,7 +10,7 @@ use super::{
     OpenGame, WsMsg,
 };
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Serialize, Clone)]
 pub struct ChessMove {
     position_from: Position,
     position_to: Position,
@@ -28,6 +28,7 @@ pub(crate) enum GameMessage {
     Error(String),
     Notification(String),
     GameEnd(bool),
+    PawnMove(ChessMove),
 }
 
 pub async fn gameplay_loop(game: OpenGame) -> anyhow::Result<()> {
@@ -159,7 +160,7 @@ pub async fn gameplay_loop(game: OpenGame) -> anyhow::Result<()> {
                 if let Err(error) = chess_piece
                     .lock()
                     .await
-                    .move_piece_to(game.chess_board.clone(), player_move.position_to)
+                    .move_piece_to(game.chess_board.clone(), &player_move.position_to)
                     .await
                 {
                     active_player
@@ -180,6 +181,19 @@ pub async fn gameplay_loop(game: OpenGame) -> anyhow::Result<()> {
                         GameMessage::Notification("Moved correctly".into()),
                     ))?))
                     .await?;
+                println!("Sending info to the next player about the opponent move...");
+                if let Err(err) = passive_player
+                    .0
+                    .lock()
+                    .await
+                    .send(Message::Text(serde_json::to_string(&WsMsg::Game(
+                        GameMessage::PawnMove(player_move),
+                    ))?))
+                    .await
+                {
+                    println!("{:?}", err);
+                };
+                println!("Sent to passive player correctly...");
             }
             GameMsgRecv::Ack => (),
         };
