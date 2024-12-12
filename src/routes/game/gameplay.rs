@@ -26,9 +26,9 @@ pub(crate) enum GameMsgRecv {
 pub(crate) enum GameMessage {
     NewTurn(bool),
     Error(String),
-    Notification(String),
+    MovedCorrectly(Option<(PieceColor, Position)>),
     GameEnd(bool),
-    PawnMove(ChessMove),
+    PawnMove(ChessMove, Option<(PieceColor, Position)>),
 }
 
 pub struct Gameplay {
@@ -143,14 +143,19 @@ impl Gameplay {
             .await
             .find_own_piece_at(&piece_move.position_from, self.active_player.0.clone())
             .ok_or(anyhow!("You don't have a piece at this position!"))?;
-        chess_piece
+        let removed_piece_maybe = chess_piece
             .lock()
             .await
             .move_piece_to(self.game.chess_board.clone(), &piece_move.position_to)
             .await?;
-        self.ws_send_active(GameMessage::Notification("Moved correctly".into()))
+        let removed_piece_to = removed_piece_maybe.and_then(|mutex_ref| {
+            mutex_ref
+                .try_lock()
+                .map(|lock| (lock.color.clone(), piece_move.clone().position_to))
+        });
+        self.ws_send_active(GameMessage::MovedCorrectly(removed_piece_to.clone()))
             .await?;
-        self.ws_send_passive(GameMessage::PawnMove(piece_move))
+        self.ws_send_passive(GameMessage::PawnMove(piece_move, removed_piece_to))
             .await?;
         Ok(())
     }

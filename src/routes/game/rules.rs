@@ -23,6 +23,15 @@ pub enum PieceColor {
     Black,
 }
 
+impl PieceColor {
+    pub fn invert(&self) -> Self {
+        match *self {
+            PieceColor::White => PieceColor::Black,
+            PieceColor::Black => PieceColor::White,
+        }
+    }
+}
+
 #[derive(PartialEq, Clone, Serialize, Deserialize, Debug)]
 pub struct Row(u8);
 
@@ -125,15 +134,17 @@ impl Piece {
         &mut self,
         game: Arc<Mutex<ChessBoard>>,
         new_position: &Position,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<Option<ArcMut<Piece>>> {
         let position_difference = new_position.clone() - self.position.clone();
         if let PieceColor::Black = self.color {
             // position_difference.0 *= -1;
         };
-        match self.piece_type {
+        let inverted_color = self.color.invert();
+        let removed = match self.piece_type {
             PieceType::Pawn => {
-                self.pawn_move(new_position.clone(), position_difference, game)
-                    .await?;
+                let removed = self
+                    .pawn_move(new_position.clone(), position_difference, game)
+                    .await;
                 match self.color {
                     PieceColor::White if new_position.row.0 == 7 => {
                         self.piece_type = PieceType::Queen;
@@ -143,6 +154,7 @@ impl Piece {
                     }
                     _ => (),
                 };
+                removed
             }
             PieceType::Knight => {
                 if !((position_difference.0.abs() == 1 && position_difference.1.abs() == 2)
@@ -150,39 +162,46 @@ impl Piece {
                 {
                     bail!("Incorrect knight move!");
                 }
-                let _ = game.lock().await.remove_piece_at(new_position, &self.color);
+                let removed = game
+                    .lock()
+                    .await
+                    .remove_piece_at(new_position, &inverted_color);
                 self.position = new_position.clone();
+                removed
             }
             PieceType::King => {
                 if !(position_difference.0.abs() <= 1 && position_difference.1.abs() <= 1) {
                     bail!("Incorrect King move!");
                 }
-                let _ = game
+                let removed = game
                     .clone()
                     .lock()
                     .await
-                    .remove_piece_at(new_position, &self.color);
+                    .remove_piece_at(new_position, &inverted_color);
                 self.position = new_position.clone();
+                removed
             }
             PieceType::Rook => {
                 self.rook_move(new_position.clone(), position_difference, game.clone())
                     .await?;
-                let _ = game
+                let removed = game
                     .clone()
                     .lock()
                     .await
-                    .remove_piece_at(new_position, &self.color);
+                    .remove_piece_at(new_position, &inverted_color);
                 self.position = new_position.clone();
+                removed
             }
             PieceType::Bishop => {
                 self.bishop_move(new_position.clone(), position_difference, game.clone())
                     .await?;
-                let _ = game
+                let removed = game
                     .clone()
                     .lock()
                     .await
-                    .remove_piece_at(new_position, &self.color);
+                    .remove_piece_at(new_position, &inverted_color);
                 self.position = new_position.clone();
+                removed
             }
             PieceType::Queen => {
                 let move_successful = [
@@ -196,16 +215,17 @@ impl Piece {
                 if !move_successful {
                     bail!("Incorrect queen move");
                 }
-                let _ = game
+                let removed = game
                     .clone()
                     .lock()
                     .await
-                    .remove_piece_at(new_position, &self.color);
+                    .remove_piece_at(new_position, &inverted_color);
                 self.position = new_position.clone();
+                removed
             }
         };
         self.times_moved += 1;
-        Ok(())
+        removed
     }
 
     async fn rook_move(
@@ -287,7 +307,7 @@ impl Piece {
         new_position: Position,
         position_difference: (i8, i8),
         game: Arc<Mutex<ChessBoard>>,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<Option<ArcMut<Piece>>, anyhow::Error> {
         if self.position.column == new_position.column {
             if position_difference.0 > 2 {
                 bail!("Can't got further than two tiles");
@@ -298,34 +318,17 @@ impl Piece {
             if self.times_moved != 0 && position_difference.0 == 2 {
                 bail!("Can't move more than one tile after the first move!");
             };
-            if game
-                .clone()
-                .lock()
-                .await
-                .find_piece_at(&new_position)
-                .is_some()
-            {
-                bail!("Cannot move to the new position, there is already a piece there.");
-            }
-            self.position = new_position;
-            return Ok(());
         };
-        if position_difference.1.abs() == 1
-            && game
-                .clone()
-                .lock()
-                .await
-                .find_piece_at(&new_position)
-                .is_some()
-        {
-            game.clone()
-                .lock()
-                .await
-                .remove_piece_at(&new_position, &self.color)?;
-            self.position = new_position;
-            return Ok(());
+        if position_difference.1.abs() != 1 {
+            bail!("Movement unreachable by any means");
         }
-        bail!("Movement unreachable by any means");
+        let removed = game
+            .clone()
+            .lock()
+            .await
+            .remove_piece_at(&new_position, &self.color.invert());
+        self.position = new_position;
+        removed
     }
 }
 
