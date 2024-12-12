@@ -21,7 +21,7 @@ use crate::{
 };
 
 use super::{
-    gameplay::gameplay_loop,
+    gameplay,
     rules::{ChessBoard, PieceColor},
     MatchmakingState, OpenGame, PlayerStreams,
 };
@@ -155,7 +155,7 @@ async fn handle_ws(
             // Stop the echo services
             opponent_state.2.abort();
             echo_task.abort();
-            gameplay_loop(open_game).await
+            gameplay::Gameplay::new(open_game).run().await
         })
         .await;
     }

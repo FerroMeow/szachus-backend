@@ -387,6 +387,19 @@ impl ChessBoard {
             .cloned()
     }
 
+    pub fn find_king(&mut self, color: PieceColor) -> Option<ArcMut<Piece>> {
+        self.pieces
+            .iter()
+            .find(|piece| {
+                piece.try_lock().unwrap().color == color
+                    && piece
+                        .try_lock()
+                        .map(|piece| piece.piece_type == PieceType::King)
+                        .unwrap_or_default()
+            })
+            .cloned()
+    }
+
     pub fn remove_piece_at(
         &mut self,
         position: &Position,
