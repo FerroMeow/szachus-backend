@@ -17,7 +17,7 @@ use sqlx::{Pool, Postgres};
 use crate::{error, routes::user::jwt::Claims, GlobalState, ServerState};
 
 use super::{
-    chessboard::ChessBoard, gameplay, piece::PieceColor, ws_messages::WsMsg, MatchmakingState,
+    chessboard::ChessBoard, gameplay, piece::PieceColor, ws_messages::WsMsgSend, MatchmakingState,
     OpenGame, PlayerStreams,
 };
 
@@ -40,7 +40,7 @@ pub async fn route_handler(
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub(crate) enum MatchmakingResponse {
+pub(crate) enum MatchmakingMsgSend {
     Searching,
     Success { color: PieceColor },
 }
@@ -80,7 +80,7 @@ async fn handle_ws(
                 .lock()
                 .await
                 .send(Message::Text(
-                    serde_json::to_string(&WsMsg::Matchmaking(MatchmakingResponse::Searching))
+                    serde_json::to_string(&WsMsgSend::Matchmaking(MatchmakingMsgSend::Searching))
                         .unwrap_or("".to_string()),
                 ))
                 .await;
@@ -123,7 +123,7 @@ async fn handle_ws(
                 .lock()
                 .await
                 .send(Message::Text(
-                    serde_json::to_string(&WsMsg::Matchmaking(MatchmakingResponse::Success {
+                    serde_json::to_string(&WsMsgSend::Matchmaking(MatchmakingMsgSend::Success {
                         color: PieceColor::Black,
                     }))
                     .unwrap(),
@@ -134,7 +134,7 @@ async fn handle_ws(
                 .lock()
                 .await
                 .send(Message::Text(
-                    serde_json::to_string(&WsMsg::Matchmaking(MatchmakingResponse::Success {
+                    serde_json::to_string(&WsMsgSend::Matchmaking(MatchmakingMsgSend::Success {
                         color: PieceColor::White,
                     }))
                     .unwrap(),

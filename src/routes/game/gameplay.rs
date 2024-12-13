@@ -6,7 +6,7 @@ use futures::{lock::Mutex, SinkExt, StreamExt};
 
 use super::piece::PieceColor;
 
-use super::ws_messages::{ChessMove, GameMessage, GameMsgRecv, WsMsg};
+use super::ws_messages::{ChessMove, GameMsgRecv, GameMsgSend, WsMsgSend};
 use super::{OpenGame, SinkStream, SplitSink, SplitStream};
 
 pub struct Gameplay {
@@ -29,20 +29,20 @@ impl Gameplay {
         Ok(serde_json::from_str::<GameMsgRecv>(&message_text)?)
     }
 
-    async fn ws_send(player: Arc<Mutex<SplitSink>>, msg: GameMessage) -> anyhow::Result<()> {
+    async fn ws_send(player: Arc<Mutex<SplitSink>>, msg: GameMsgSend) -> anyhow::Result<()> {
         player
             .lock()
             .await
-            .send(Message::Text(serde_json::to_string(&WsMsg::Game(msg))?))
+            .send(Message::Text(serde_json::to_string(&WsMsgSend::Game(msg))?))
             .await
             .map_err(|err| err.into())
     }
 
-    async fn ws_send_active(&mut self, msg: GameMessage) -> anyhow::Result<()> {
+    async fn ws_send_active(&mut self, msg: GameMsgSend) -> anyhow::Result<()> {
         Self::ws_send(self.active_player.1 .0.clone(), msg).await
     }
 
-    async fn ws_send_passive(&mut self, msg: GameMessage) -> anyhow::Result<()> {
+    async fn ws_send_passive(&mut self, msg: GameMsgSend) -> anyhow::Result<()> {
         Self::ws_send(self.passive_player.1 .0.clone(), msg).await
     }
 
@@ -70,14 +70,14 @@ impl Gameplay {
         if !matches!(self.ws_next_passive().await?, GameMsgRecv::Ack) {
             bail!("No black player ack");
         };
-        self.ws_send_active(GameMessage::NewTurn(true)).await?;
-        self.ws_send_passive(GameMessage::NewTurn(false)).await?;
+        self.ws_send_active(GameMsgSend::NewTurn(true)).await?;
+        self.ws_send_passive(GameMsgSend::NewTurn(false)).await?;
         loop {
             let player_msg = loop {
                 let player_msg = match self.ws_next_active().await {
                     Ok(msg) => msg,
                     Err(err) => {
-                        self.ws_send_active(GameMessage::Error(format!("{:?}", err)))
+                        self.ws_send_active(GameMsgSend::Error(format!("{:?}", err)))
                             .await?;
                         continue;
                     }
@@ -88,7 +88,7 @@ impl Gameplay {
                 GameMsgRecv::TurnEnd(piece_move) => {
                     if let Err(error) = self.handle_turn_end(piece_move).await {
                         println!("Error: {:?}", error);
-                        self.ws_send_active(GameMessage::Error(format!("{:?}", error)))
+                        self.ws_send_active(GameMsgSend::Error(format!("{:?}", error)))
                             .await?;
                         continue;
                     };
@@ -106,7 +106,7 @@ impl Gameplay {
                 }
                 Err(error) => {
                     println!("Error: {:?}", error);
-                    self.ws_send_active(GameMessage::Error(format!("{:?}", error)))
+                    self.ws_send_active(GameMsgSend::Error(format!("{:?}", error)))
                         .await?;
                 }
             };
@@ -126,17 +126,17 @@ impl Gameplay {
             .await?;
         let removed_piece_to =
             removed_piece_maybe.map(|lock| (lock.color.clone(), piece_move.clone().position_to));
-        self.ws_send_active(GameMessage::MovedCorrectly(removed_piece_to.clone()))
+        self.ws_send_active(GameMsgSend::MovedCorrectly(removed_piece_to.clone()))
             .await?;
-        self.ws_send_passive(GameMessage::PawnMove(piece_move, removed_piece_to))
+        self.ws_send_passive(GameMsgSend::PawnMove(piece_move, removed_piece_to))
             .await?;
         Ok(())
     }
 
     async fn switch_turns(&mut self) -> anyhow::Result<()> {
         std::mem::swap(&mut self.active_player, &mut self.passive_player);
-        self.ws_send_active(GameMessage::NewTurn(true)).await?;
-        self.ws_send_passive(GameMessage::NewTurn(false)).await?;
+        self.ws_send_active(GameMsgSend::NewTurn(true)).await?;
+        self.ws_send_passive(GameMsgSend::NewTurn(false)).await?;
         Ok(())
     }
 
@@ -157,8 +157,8 @@ impl Gameplay {
             } else {
                 (self.passive_player.clone(), self.active_player.clone())
             };
-            Self::ws_send(winner.1 .0.clone(), GameMessage::GameEnd(true)).await?;
-            Self::ws_send(loser.1 .0.clone(), GameMessage::GameEnd(false)).await?;
+            Self::ws_send(winner.1 .0.clone(), GameMsgSend::GameEnd(true)).await?;
+            Self::ws_send(loser.1 .0.clone(), GameMsgSend::GameEnd(false)).await?;
             Ok(true)
         } else {
             Ok(false)
