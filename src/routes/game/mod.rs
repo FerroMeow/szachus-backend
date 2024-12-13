@@ -54,7 +54,7 @@ pub struct PlayerStreams {
 
 pub struct OpenGame {
     pub game_data: Game,
-    pub chess_board: Arc<Mutex<ChessBoard>>,
+    pub chess_board: ChessBoard,
     pub user_stream: PlayerStreams,
 }
 

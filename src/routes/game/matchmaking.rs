@@ -115,7 +115,7 @@ async fn handle_ws(
         };
         let open_game = OpenGame {
             game_data: game_data.clone(),
-            chess_board: Arc::new(Mutex::new(chess_board)),
+            chess_board,
             user_stream: PlayerStreams {
                 white_player: (opponent_state.0.clone(), opponent_state.1),
                 black_player: (tx.clone(), rx.clone()),

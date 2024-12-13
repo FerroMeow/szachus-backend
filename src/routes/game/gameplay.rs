@@ -137,22 +137,17 @@ impl Gameplay {
     }
 
     async fn handle_turn_end(&mut self, piece_move: ChessMove) -> anyhow::Result<()> {
-        let chess_board_arc = self.game.chess_board.clone();
-        let chess_piece = chess_board_arc
-            .lock()
-            .await
-            .find_own_piece_at(&piece_move.position_from, self.active_player.0.clone())
-            .ok_or(anyhow!("You don't have a piece at this position!"))?;
-        let removed_piece_maybe = chess_piece
-            .lock()
-            .await
-            .move_piece_to(self.game.chess_board.clone(), &piece_move.position_to)
+        let removed_piece_maybe = self
+            .game
+            .chess_board
+            .move_piece(
+                &self.active_player.0,
+                &piece_move.position_from,
+                &piece_move.position_to,
+            )
             .await?;
-        let removed_piece_to = removed_piece_maybe.and_then(|mutex_ref| {
-            mutex_ref
-                .try_lock()
-                .map(|lock| (lock.color.clone(), piece_move.clone().position_to))
-        });
+        let removed_piece_to =
+            removed_piece_maybe.map(|lock| (lock.color.clone(), piece_move.clone().position_to));
         self.ws_send_active(GameMessage::MovedCorrectly(removed_piece_to.clone()))
             .await?;
         self.ws_send_passive(GameMessage::PawnMove(piece_move, removed_piece_to))
@@ -168,9 +163,8 @@ impl Gameplay {
     }
 
     async fn handle_win(&mut self) -> anyhow::Result<bool> {
-        let mut board_lock = self.game.chess_board.lock().await;
-        let white_king = board_lock.find_king(PieceColor::White);
-        let black_king = board_lock.find_king(PieceColor::Black);
+        let white_king = self.game.chess_board.find_king(PieceColor::White);
+        let black_king = self.game.chess_board.find_king(PieceColor::Black);
         let winning_king = match (white_king, black_king) {
             (None, Some(_)) => Some(PieceColor::Black),
             (Some(_), None) => Some(PieceColor::White),

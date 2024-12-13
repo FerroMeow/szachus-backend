@@ -1,11 +1,5 @@
-use std::sync::Arc;
-
-use anyhow::bail;
-use futures::lock::Mutex;
-use rust_decimal::prelude::Zero;
+use anyhow::{anyhow, bail};
 use serde::{Deserialize, Serialize};
-
-use super::ArcMut;
 
 #[derive(PartialEq, Clone, Serialize, Deserialize, Debug)]
 pub enum PieceType {
@@ -130,21 +124,12 @@ impl Piece {
         })
     }
 
-    pub async fn move_piece_to(
-        &mut self,
-        game: Arc<Mutex<ChessBoard>>,
-        new_position: &Position,
-    ) -> anyhow::Result<Option<ArcMut<Piece>>> {
+    pub async fn move_piece_to(&mut self, new_position: &Position) -> anyhow::Result<()> {
         let position_difference = new_position.clone() - self.position.clone();
-        if let PieceColor::Black = self.color {
-            // position_difference.0 *= -1;
-        };
-        let inverted_color = self.color.invert();
-        let removed = match self.piece_type {
+        match self.piece_type {
             PieceType::Pawn => {
-                let removed = self
-                    .pawn_move(new_position.clone(), position_difference, game)
-                    .await;
+                self.pawn_move(new_position.clone(), position_difference)
+                    .await?;
                 match self.color {
                     PieceColor::White if new_position.row.0 == 7 => {
                         self.piece_type = PieceType::Queen;
@@ -154,7 +139,6 @@ impl Piece {
                     }
                     _ => (),
                 };
-                removed
             }
             PieceType::Knight => {
                 if !((position_difference.0.abs() == 1 && position_difference.1.abs() == 2)
@@ -162,152 +146,57 @@ impl Piece {
                 {
                     bail!("Incorrect knight move!");
                 }
-                let removed = game
-                    .lock()
-                    .await
-                    .remove_piece_at(new_position, &inverted_color);
-                self.position = new_position.clone();
-                removed
             }
             PieceType::King => {
                 if !(position_difference.0.abs() <= 1 && position_difference.1.abs() <= 1) {
                     bail!("Incorrect King move!");
                 }
-                let removed = game
-                    .clone()
-                    .lock()
-                    .await
-                    .remove_piece_at(new_position, &inverted_color);
-                self.position = new_position.clone();
-                removed
             }
             PieceType::Rook => {
-                self.rook_move(new_position.clone(), position_difference, game.clone())
-                    .await?;
-                let removed = game
-                    .clone()
-                    .lock()
-                    .await
-                    .remove_piece_at(new_position, &inverted_color);
-                self.position = new_position.clone();
-                removed
+                self.rook_move(position_difference).await?;
             }
             PieceType::Bishop => {
-                self.bishop_move(new_position.clone(), position_difference, game.clone())
-                    .await?;
-                let removed = game
-                    .clone()
-                    .lock()
-                    .await
-                    .remove_piece_at(new_position, &inverted_color);
-                self.position = new_position.clone();
-                removed
+                self.bishop_move(position_difference).await?;
             }
             PieceType::Queen => {
                 let move_successful = [
-                    self.rook_move(new_position.clone(), position_difference, game.clone())
-                        .await,
-                    self.bishop_move(new_position.clone(), position_difference, game.clone())
-                        .await,
+                    self.rook_move(position_difference).await,
+                    self.bishop_move(position_difference).await,
                 ]
                 .iter()
                 .any(|result| result.is_ok());
                 if !move_successful {
                     bail!("Incorrect queen move");
                 }
-                let removed = game
-                    .clone()
-                    .lock()
-                    .await
-                    .remove_piece_at(new_position, &inverted_color);
-                self.position = new_position.clone();
-                removed
             }
         };
+        self.position = new_position.clone();
         self.times_moved += 1;
-        removed
+        Ok(())
     }
 
-    async fn rook_move(
-        &mut self,
-        new_position: Position,
-        position_difference: (i8, i8),
-        game: Arc<Mutex<ChessBoard>>,
-    ) -> Result<(), anyhow::Error> {
-        let (row_mod, col_mod) = match position_difference {
-            (row, col) if (row.is_negative() && col.is_zero()) => (-1, 0),
-            (row, col) if (row.is_positive() && col.is_zero()) => (1, 0),
-            (row, col) if (row.is_zero() && col.is_negative()) => (0, -1),
-            (row, col) if (row.is_zero() && col.is_positive()) => (0, 1),
-            _ => bail!("Incorrect rook move"),
-        };
-        let mut current_position = self.position.clone();
-        loop {
-            current_position = Position::new(
-                current_position.row.0 as i8 + row_mod,
-                self.position.column.0 as i8 + col_mod,
-            )?;
-            if current_position == new_position {
-                return Ok(());
-            }
-            if game
-                .clone()
-                .lock()
-                .await
-                .find_piece_at(&current_position)
-                .is_some()
-            {
-                bail!("Cannot move over a tile");
-            }
+    async fn rook_move(&mut self, position_difference: (i8, i8)) -> Result<(), anyhow::Error> {
+        if position_difference.0 != 0 && position_difference.1 != 0 {
+            bail!("Incorrect rook move");
         }
+        Ok(())
     }
 
-    async fn bishop_move(
-        &mut self,
-        new_position: Position,
-        position_difference: (i8, i8),
-        game: Arc<Mutex<ChessBoard>>,
-    ) -> Result<(), anyhow::Error> {
+    async fn bishop_move(&mut self, position_difference: (i8, i8)) -> Result<(), anyhow::Error> {
         if position_difference.0 == 0
             || position_difference.1 == 0
             || position_difference.0.abs() != position_difference.1.abs()
         {
             bail!("Incorrect bishop move");
         };
-        let (row_mod, col_mod) = match position_difference {
-            (row, col) if (row.is_negative() && col.is_negative()) => (-1, -1),
-            (row, col) if (row.is_negative() && col.is_positive()) => (-1, 1),
-            (row, col) if (row.is_positive() && col.is_positive()) => (1, 1),
-            (row, col) if (row.is_positive() && col.is_negative()) => (1, -1),
-            _ => bail!("Incorrect bishop move"),
-        };
-        let mut current_position = self.position.clone();
-        loop {
-            current_position = Position::new(
-                current_position.row.0 as i8 + row_mod,
-                self.position.column.0 as i8 + col_mod,
-            )?;
-            if current_position == new_position {
-                return Ok(());
-            }
-            if game
-                .clone()
-                .lock()
-                .await
-                .find_piece_at(&current_position)
-                .is_some()
-            {
-                bail!("Cannot move over a tile");
-            }
-        }
+        Ok(())
     }
 
     async fn pawn_move(
         &mut self,
         new_position: Position,
         position_difference: (i8, i8),
-        game: Arc<Mutex<ChessBoard>>,
-    ) -> Result<Option<ArcMut<Piece>>, anyhow::Error> {
+    ) -> anyhow::Result<()> {
         if self.position.column == new_position.column {
             if position_difference.0 > 2 {
                 bail!("Can't got further than two tiles");
@@ -322,19 +211,13 @@ impl Piece {
         if position_difference.1.abs() != 1 {
             bail!("Movement unreachable by any means");
         }
-        let removed = game
-            .clone()
-            .lock()
-            .await
-            .remove_piece_at(&new_position, &self.color.invert());
-        self.position = new_position;
-        removed
+        Ok(())
     }
 }
 
 #[derive(Clone, Debug)]
 pub struct ChessBoard {
-    pub pieces: Vec<ArcMut<Piece>>,
+    pub pieces: Vec<Piece>,
 }
 
 impl ChessBoard {
@@ -362,66 +245,115 @@ impl ChessBoard {
             .collect::<Result<Vec<_>, _>>()?
             .into_iter()
             .flatten()
-            .map(|p| Arc::new(Mutex::new(p)))
             .collect::<Vec<_>>();
         Ok(Self { pieces })
     }
 
-    pub fn find_piece_at(&self, position: &Position) -> Option<&ArcMut<Piece>> {
-        self.pieces.iter().find(move |piece| {
-            piece
-                .try_lock()
-                .map(|piece| piece.position == *position)
-                .unwrap_or(false)
-        })
-    }
-
-    pub fn find_own_piece_at(
-        &mut self,
-        position: &Position,
-        color: PieceColor,
-    ) -> Option<ArcMut<Piece>> {
+    pub fn find_piece_at(&mut self, position: &Position) -> Option<&mut Piece> {
         self.pieces
-            .iter()
-            .find(move |piece| {
-                piece.try_lock().unwrap().position == *position
-                    && piece.try_lock().unwrap().color == color
-            })
-            .cloned()
+            .iter_mut()
+            .find(move |piece| piece.position == *position)
     }
 
-    pub fn find_king(&mut self, color: PieceColor) -> Option<ArcMut<Piece>> {
-        self.pieces
-            .iter()
-            .find(|piece| {
-                piece.try_lock().unwrap().color == color
-                    && piece
-                        .try_lock()
-                        .map(|piece| piece.piece_type == PieceType::King)
-                        .unwrap_or_default()
-            })
-            .cloned()
-    }
-
-    pub fn remove_piece_at(
+    pub fn find_own_piece_at_mut(
         &mut self,
         position: &Position,
         color: &PieceColor,
-    ) -> anyhow::Result<Option<ArcMut<Piece>>> {
-        let Some(position) = self.pieces.iter().position(move |piece| {
-            piece
-                .try_lock()
-                .map_or(false, |piece| piece.position == *position)
+    ) -> Option<&mut Piece> {
+        self.pieces
+            .iter_mut()
+            .find(move |piece| piece.position == *position && piece.color == *color)
+    }
+
+    pub fn find_king(&self, color: PieceColor) -> Option<&Piece> {
+        self.pieces
+            .iter()
+            .find(|piece| piece.color == color && piece.piece_type == PieceType::King)
+    }
+
+    pub fn remove_piece(
+        &mut self,
+        position: &Position,
+        color: &PieceColor,
+    ) -> anyhow::Result<Option<Piece>> {
+        let Some(position) = self.pieces.iter().position(move |current_piece| {
+            current_piece.position == *position && current_piece.color == *color
         }) else {
             bail!("piece not found at the new position");
         };
-        if let Some(pawn) = self.pieces.get(position) {
-            if pawn.try_lock().unwrap().color == *color {
-                return Ok(None);
-            }
-        } else {
-            bail!("Piece not found!");
-        }
         Ok(Some(self.pieces.swap_remove(position)))
+    }
+
+    pub fn is_path_clear(&self, from: &Position, to: &Position) -> bool {
+        let from_row = from.row.0;
+        let to_row = to.row.0;
+        let from_col = from.column.0;
+        let to_col = to.column.0;
+        // Movement in the same column
+        if from.column.0 == to.column.0 {
+            for piece in self.pieces.iter() {
+                if piece.position.column.0 != from.column.0 {
+                    continue;
+                }
+                let row = piece.position.row.0;
+                if (row > from_row && row < to_row) || (row > to_row && row < from_row) {
+                    return false;
+                }
+            }
+        };
+        // Movement in the same row
+        if from.row.0 == to.row.0 {
+            for piece in self.pieces.iter() {
+                if piece.position.row.0 != from.row.0 {
+                    continue;
+                }
+                let col = piece.position.column.0;
+                if (col > from_col && col < to_col) || (col > to_col && col < from_col) {
+                    return false;
+                }
+            }
+        };
+        // Diagonal
+        let diff_col = (from_col as i8 - to_col as i8).abs() as u8;
+        let diff_row = (from_row as i8 - to_row as i8).abs() as u8;
+        if diff_col == diff_row {
+            for i in 1..diff_col {
+                let pos = if from_col < to_col && from_row < to_row {
+                    (from_col + i, from_row + i)
+                } else if from_col < to_col && from_row > to_row {
+                    (from_col + i, from_row - i)
+                } else if from_col > to_col && from_row < to_row {
+                    (from_col - i, from_row + i)
+                } else {
+                    (from_col - i, from_row - i)
+                };
+                if self
+                    .pieces
+                    .iter()
+                    .find(|piece| piece.position.column.0 == pos.0 && piece.position.row.0 == pos.1)
+                    .is_some()
+                {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    pub async fn move_piece(
+        &mut self,
+        player_color: &PieceColor,
+        from: &Position,
+        to: &Position,
+    ) -> anyhow::Result<Option<Piece>> {
+        if !self.is_path_clear(from, to) {
+            bail!("The path is currently occupied");
+        }
+        let piece = self.find_own_piece_at_mut(from, player_color);
+        let piece = piece.ok_or(anyhow!("You don't have a piece at this position!"))?;
+        piece.move_piece_to(to).await?;
+        drop(piece);
+        self.remove_piece(to, &player_color.invert());
+        todo!()
     }
 }
