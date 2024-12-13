@@ -5,10 +5,9 @@ use axum::extract::ws::Message;
 use futures::{lock::Mutex, SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 
-use super::{
-    rules::{PieceColor, Position},
-    OpenGame, SinkStream, SplitSink, SplitStream, WsMsg,
-};
+use super::position::Position;
+
+use super::{rules::PieceColor, OpenGame, SinkStream, SplitSink, SplitStream, WsMsg};
 
 #[derive(Deserialize, Debug, Serialize, Clone)]
 pub struct ChessMove {

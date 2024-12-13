@@ -1,6 +1,8 @@
 use anyhow::{anyhow, bail};
 use serde::{Deserialize, Serialize};
 
+use super::position::Position;
+
 #[derive(PartialEq, Clone, Serialize, Deserialize, Debug)]
 pub enum PieceType {
     Rook,
@@ -25,81 +27,6 @@ impl PieceColor {
         }
     }
 }
-
-#[derive(PartialEq, Clone, Serialize, Deserialize, Debug)]
-pub struct Row(u8);
-
-impl Row {
-    pub fn new(row: i8) -> anyhow::Result<Self> {
-        if !(0..=7).contains(&row) {
-            bail!("Row must be between 0 and 7");
-        }
-        Ok(Self(row as u8))
-    }
-}
-
-impl std::ops::Add for Row {
-    type Output = anyhow::Result<Row>;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        let new_value = self.0 + rhs.0;
-        if new_value > 7 {
-            bail!("Row must be between 0 and 7");
-        };
-        Ok(Row(new_value))
-    }
-}
-
-#[derive(PartialEq, Clone, Serialize, Deserialize, Debug)]
-pub struct Column(u8);
-
-impl Column {
-    pub fn new(column: i8) -> anyhow::Result<Self> {
-        if !(0..=7).contains(&column) {
-            bail!("Column must be between 0 and 7");
-        }
-        Ok(Self(column as u8))
-    }
-}
-
-impl std::ops::Add for Column {
-    type Output = anyhow::Result<Column>;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        let new_value = self.0 + rhs.0;
-        if new_value > 7 {
-            bail!("Column must be between 0 and 7");
-        };
-        Ok(Column(new_value))
-    }
-}
-
-#[derive(PartialEq, Clone, Serialize, Deserialize, Debug)]
-pub struct Position {
-    row: Row,
-    column: Column,
-}
-
-impl Position {
-    pub fn new(row: i8, column: i8) -> anyhow::Result<Self> {
-        Ok(Position {
-            row: Row::new(row)?,
-            column: Column::new(column)?,
-        })
-    }
-}
-
-impl std::ops::Sub for Position {
-    type Output = (i8, i8);
-
-    fn sub(self, rhs: Self) -> Self::Output {
-        (
-            (self.row.0 as i8 - rhs.row.0 as i8).abs(),
-            (self.column.0 as i8 - rhs.column.0 as i8).abs(),
-        )
-    }
-}
-
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct Piece {
     pub piece_type: PieceType,
@@ -119,7 +46,7 @@ impl Piece {
         Ok(Piece {
             piece_type,
             color,
-            position: Position::new(row, column)?,
+            position: Position::new(column, row),
             times_moved: 0,
         })
     }
@@ -131,10 +58,10 @@ impl Piece {
                 self.pawn_move(new_position.clone(), position_difference)
                     .await?;
                 match self.color {
-                    PieceColor::White if new_position.row.0 == 7 => {
+                    PieceColor::White if new_position.row == 7 => {
                         self.piece_type = PieceType::Queen;
                     }
-                    PieceColor::Black if new_position.row.0 == 0 => {
+                    PieceColor::Black if new_position.row == 0 => {
                         self.piece_type = PieceType::Queen;
                     }
                     _ => (),
@@ -274,37 +201,37 @@ impl ChessBoard {
     }
 
     pub fn is_path_clear(&self, from: &Position, to: &Position) -> bool {
-        let from_row = from.row.0;
-        let to_row = to.row.0;
-        let from_col = from.column.0;
-        let to_col = to.column.0;
+        let from_row = from.row;
+        let to_row = to.row;
+        let from_col = from.column;
+        let to_col = to.column;
         // Movement in the same column
-        if from.column.0 == to.column.0 {
+        if from.column == to.column {
             for piece in self.pieces.iter() {
-                if piece.position.column.0 != from.column.0 {
+                if piece.position.column != from.column {
                     continue;
                 }
-                let row = piece.position.row.0;
+                let row = piece.position.row;
                 if (row > from_row && row < to_row) || (row > to_row && row < from_row) {
                     return false;
                 }
             }
         };
         // Movement in the same row
-        if from.row.0 == to.row.0 {
+        if from.row == to.row {
             for piece in self.pieces.iter() {
-                if piece.position.row.0 != from.row.0 {
+                if piece.position.row != from.row {
                     continue;
                 }
-                let col = piece.position.column.0;
+                let col = piece.position.column;
                 if (col > from_col && col < to_col) || (col > to_col && col < from_col) {
                     return false;
                 }
             }
         };
         // Diagonal
-        let diff_col = (from_col as i8 - to_col as i8).unsigned_abs();
-        let diff_row = (from_row as i8 - to_row as i8).unsigned_abs();
+        let diff_col = (from_col - to_col).abs();
+        let diff_row = (from_row - to_row).abs();
         if diff_col == diff_row {
             for i in 1..diff_col {
                 let pos = if from_col < to_col && from_row < to_row {
@@ -319,7 +246,7 @@ impl ChessBoard {
                 if self
                     .pieces
                     .iter()
-                    .any(|piece| piece.position.column.0 == pos.0 && piece.position.row.0 == pos.1)
+                    .any(|piece| piece.position.column == pos.0 && piece.position.row == pos.1)
                 {
                     return false;
                 }

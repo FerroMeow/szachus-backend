@@ -19,6 +19,7 @@ use crate::ServerState;
 
 pub mod gameplay;
 pub mod matchmaking;
+pub mod position;
 pub mod rules;
 
 pub type SplitSink = stream::SplitSink<WebSocket, Message>;
