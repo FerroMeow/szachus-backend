@@ -6,7 +6,7 @@ use futures::{lock::Mutex, SinkExt, StreamExt};
 
 use super::piece::PieceColor;
 
-use super::ws_messages::{ChessMove, GameMsgRecv, GameMsgSend, WsMsgSend};
+use super::ws_messages::{ChessMove, GameClientMsg, GameServerMsg, ServerMsg};
 use super::{OpenGame, SinkStream, SplitSink, SplitStream};
 
 pub struct Gameplay {
@@ -16,7 +16,7 @@ pub struct Gameplay {
 }
 
 impl Gameplay {
-    async fn ws_next(player: Arc<Mutex<SplitStream>>) -> anyhow::Result<GameMsgRecv> {
+    async fn ws_next(player: Arc<Mutex<SplitStream>>) -> anyhow::Result<GameClientMsg> {
         let ws_message = player
             .lock()
             .await
@@ -26,31 +26,31 @@ impl Gameplay {
         let Message::Text(message_text) = ws_message else {
             bail!("Incorrect WebSocket message type");
         };
-        Ok(serde_json::from_str::<GameMsgRecv>(&message_text)?)
+        Ok(serde_json::from_str::<GameClientMsg>(&message_text)?)
     }
 
-    async fn ws_send(player: Arc<Mutex<SplitSink>>, msg: GameMsgSend) -> anyhow::Result<()> {
+    async fn ws_send(player: Arc<Mutex<SplitSink>>, msg: GameServerMsg) -> anyhow::Result<()> {
         player
             .lock()
             .await
-            .send(Message::Text(serde_json::to_string(&WsMsgSend::Game(msg))?))
+            .send(Message::Text(serde_json::to_string(&ServerMsg::Game(msg))?))
             .await
             .map_err(|err| err.into())
     }
 
-    async fn ws_send_active(&mut self, msg: GameMsgSend) -> anyhow::Result<()> {
+    async fn ws_send_active(&mut self, msg: GameServerMsg) -> anyhow::Result<()> {
         Self::ws_send(self.active_player.1 .0.clone(), msg).await
     }
 
-    async fn ws_send_passive(&mut self, msg: GameMsgSend) -> anyhow::Result<()> {
+    async fn ws_send_passive(&mut self, msg: GameServerMsg) -> anyhow::Result<()> {
         Self::ws_send(self.passive_player.1 .0.clone(), msg).await
     }
 
-    async fn ws_next_active(&mut self) -> anyhow::Result<GameMsgRecv> {
+    async fn ws_next_active(&mut self) -> anyhow::Result<GameClientMsg> {
         Self::ws_next(self.active_player.1 .1.clone()).await
     }
 
-    async fn ws_next_passive(&mut self) -> anyhow::Result<GameMsgRecv> {
+    async fn ws_next_passive(&mut self) -> anyhow::Result<GameClientMsg> {
         Self::ws_next(self.passive_player.1 .1.clone()).await
     }
 
@@ -64,20 +64,20 @@ impl Gameplay {
 
     pub async fn run(&mut self) -> anyhow::Result<()> {
         // Wait for both players to acknowledge their involvement
-        if !matches!(self.ws_next_active().await?, GameMsgRecv::Ack) {
+        if !matches!(self.ws_next_active().await?, GameClientMsg::Ack) {
             bail!("No white player ack");
         };
-        if !matches!(self.ws_next_passive().await?, GameMsgRecv::Ack) {
+        if !matches!(self.ws_next_passive().await?, GameClientMsg::Ack) {
             bail!("No black player ack");
         };
-        self.ws_send_active(GameMsgSend::NewTurn(true)).await?;
-        self.ws_send_passive(GameMsgSend::NewTurn(false)).await?;
+        self.ws_send_active(GameServerMsg::NewTurn(true)).await?;
+        self.ws_send_passive(GameServerMsg::NewTurn(false)).await?;
         loop {
             let player_msg = loop {
                 let player_msg = match self.ws_next_active().await {
                     Ok(msg) => msg,
                     Err(err) => {
-                        self.ws_send_active(GameMsgSend::Error(format!("{:?}", err)))
+                        self.ws_send_active(GameServerMsg::Error(format!("{:?}", err)))
                             .await?;
                         continue;
                     }
@@ -85,15 +85,15 @@ impl Gameplay {
                 break player_msg;
             };
             match player_msg {
-                GameMsgRecv::TurnEnd(piece_move) => {
+                GameClientMsg::TurnEnd(piece_move) => {
                     if let Err(error) = self.handle_turn_end(piece_move).await {
                         println!("Error: {:?}", error);
-                        self.ws_send_active(GameMsgSend::Error(format!("{:?}", error)))
+                        self.ws_send_active(GameServerMsg::Error(format!("{:?}", error)))
                             .await?;
                         continue;
                     };
                 }
-                GameMsgRecv::Ack => {
+                GameClientMsg::Ack => {
                     continue;
                 }
             };
@@ -106,7 +106,7 @@ impl Gameplay {
                 }
                 Err(error) => {
                     println!("Error: {:?}", error);
-                    self.ws_send_active(GameMsgSend::Error(format!("{:?}", error)))
+                    self.ws_send_active(GameServerMsg::Error(format!("{:?}", error)))
                         .await?;
                 }
             };
@@ -126,17 +126,17 @@ impl Gameplay {
             .await?;
         let removed_piece_to =
             removed_piece_maybe.map(|lock| (lock.color.clone(), piece_move.clone().position_to));
-        self.ws_send_active(GameMsgSend::MovedCorrectly(removed_piece_to.clone()))
+        self.ws_send_active(GameServerMsg::MovedCorrectly(removed_piece_to.clone()))
             .await?;
-        self.ws_send_passive(GameMsgSend::PawnMove(piece_move, removed_piece_to))
+        self.ws_send_passive(GameServerMsg::PawnMove(piece_move, removed_piece_to))
             .await?;
         Ok(())
     }
 
     async fn switch_turns(&mut self) -> anyhow::Result<()> {
         std::mem::swap(&mut self.active_player, &mut self.passive_player);
-        self.ws_send_active(GameMsgSend::NewTurn(true)).await?;
-        self.ws_send_passive(GameMsgSend::NewTurn(false)).await?;
+        self.ws_send_active(GameServerMsg::NewTurn(true)).await?;
+        self.ws_send_passive(GameServerMsg::NewTurn(false)).await?;
         Ok(())
     }
 
@@ -157,8 +157,8 @@ impl Gameplay {
             } else {
                 (self.passive_player.clone(), self.active_player.clone())
             };
-            Self::ws_send(winner.1 .0.clone(), GameMsgSend::GameEnd(true)).await?;
-            Self::ws_send(loser.1 .0.clone(), GameMsgSend::GameEnd(false)).await?;
+            Self::ws_send(winner.1 .0.clone(), GameServerMsg::GameEnd(true)).await?;
+            Self::ws_send(loser.1 .0.clone(), GameServerMsg::GameEnd(false)).await?;
             Ok(true)
         } else {
             Ok(false)

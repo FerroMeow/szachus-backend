@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::{piece::PieceColor, position::Position, MatchmakingMsgSend};
+use super::{piece::PieceColor, position::Position, MatchmakingServerMsg};
 
 #[derive(Deserialize, Debug, Serialize, Clone)]
 pub struct ChessMove {
@@ -9,13 +9,13 @@ pub struct ChessMove {
 }
 
 #[derive(Deserialize, Debug)]
-pub(crate) enum GameMsgRecv {
+pub(crate) enum GameClientMsg {
     TurnEnd(ChessMove),
     Ack,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) enum GameMsgSend {
+pub(crate) enum GameServerMsg {
     NewTurn(bool),
     Error(String),
     MovedCorrectly(Option<(PieceColor, Position)>),
@@ -24,7 +24,7 @@ pub(crate) enum GameMsgSend {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) enum WsMsgSend {
-    Matchmaking(MatchmakingMsgSend),
-    Game(GameMsgSend),
+pub(crate) enum ServerMsg {
+    Matchmaking(MatchmakingServerMsg),
+    Game(GameServerMsg),
 }

@@ -10,7 +10,7 @@ use axum::{
 };
 use chessboard::ChessBoard;
 use futures::{lock::Mutex, stream};
-use matchmaking::{Game, MatchmakingMsgSend};
+use matchmaking::{Game, MatchmakingServerMsg};
 use tokio::task::JoinHandle;
 
 use crate::ServerState;
