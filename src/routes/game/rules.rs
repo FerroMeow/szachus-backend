@@ -207,6 +207,7 @@ impl Piece {
             if self.times_moved != 0 && position_difference.0 == 2 {
                 bail!("Can't move more than one tile after the first move!");
             };
+            return Ok(());
         };
         if position_difference.1.abs() != 1 {
             bail!("Movement unreachable by any means");
@@ -249,12 +250,6 @@ impl ChessBoard {
         Ok(Self { pieces })
     }
 
-    pub fn find_piece_at(&mut self, position: &Position) -> Option<&mut Piece> {
-        self.pieces
-            .iter_mut()
-            .find(move |piece| piece.position == *position)
-    }
-
     pub fn find_own_piece_at_mut(
         &mut self,
         position: &Position,
@@ -271,17 +266,11 @@ impl ChessBoard {
             .find(|piece| piece.color == color && piece.piece_type == PieceType::King)
     }
 
-    pub fn remove_piece(
-        &mut self,
-        position: &Position,
-        color: &PieceColor,
-    ) -> anyhow::Result<Option<Piece>> {
-        let Some(position) = self.pieces.iter().position(move |current_piece| {
+    pub fn remove_piece(&mut self, position: &Position, color: &PieceColor) -> Option<Piece> {
+        let position = self.pieces.iter().position(move |current_piece| {
             current_piece.position == *position && current_piece.color == *color
-        }) else {
-            bail!("piece not found at the new position");
-        };
-        Ok(Some(self.pieces.swap_remove(position)))
+        })?;
+        Some(self.pieces.swap_remove(position))
     }
 
     pub fn is_path_clear(&self, from: &Position, to: &Position) -> bool {
@@ -314,8 +303,8 @@ impl ChessBoard {
             }
         };
         // Diagonal
-        let diff_col = (from_col as i8 - to_col as i8).abs() as u8;
-        let diff_row = (from_row as i8 - to_row as i8).abs() as u8;
+        let diff_col = (from_col as i8 - to_col as i8).unsigned_abs();
+        let diff_row = (from_row as i8 - to_row as i8).unsigned_abs();
         if diff_col == diff_row {
             for i in 1..diff_col {
                 let pos = if from_col < to_col && from_row < to_row {
@@ -330,14 +319,13 @@ impl ChessBoard {
                 if self
                     .pieces
                     .iter()
-                    .find(|piece| piece.position.column.0 == pos.0 && piece.position.row.0 == pos.1)
-                    .is_some()
+                    .any(|piece| piece.position.column.0 == pos.0 && piece.position.row.0 == pos.1)
                 {
                     return false;
                 }
             }
         }
-        return true;
+        true
     }
 
     pub async fn move_piece(
@@ -352,8 +340,6 @@ impl ChessBoard {
         let piece = self.find_own_piece_at_mut(from, player_color);
         let piece = piece.ok_or(anyhow!("You don't have a piece at this position!"))?;
         piece.move_piece_to(to).await?;
-        drop(piece);
-        self.remove_piece(to, &player_color.invert());
-        todo!()
+        Ok(self.remove_piece(to, &player_color.invert()))
     }
 }
