@@ -8,19 +8,19 @@ use axum::{
     routing::get,
     Router,
 };
+use chessboard::ChessBoard;
 use futures::{lock::Mutex, stream};
-use gameplay::GameMessage;
 use matchmaking::{Game, MatchmakingResponse};
-use rules::ChessBoard;
-use serde::{Deserialize, Serialize};
 use tokio::task::JoinHandle;
 
 use crate::ServerState;
 
+pub mod chessboard;
 pub mod gameplay;
 pub mod matchmaking;
+pub mod piece;
 pub mod position;
-pub mod rules;
+pub mod ws_messages;
 
 pub type SplitSink = stream::SplitSink<WebSocket, Message>;
 pub type SplitStream = stream::SplitStream<WebSocket>;
@@ -40,12 +40,6 @@ type ArcMut<T> = Arc<Mutex<T>>;
 
 // txc, rx
 type SinkStream = (ArcMut<SplitSink>, ArcMut<SplitStream>);
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) enum WsMsg {
-    Matchmaking(MatchmakingResponse),
-    Game(GameMessage),
-}
 
 // player tx, rx
 pub struct PlayerStreams {

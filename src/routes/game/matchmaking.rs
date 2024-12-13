@@ -14,16 +14,11 @@ use futures::{lock::Mutex, SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Postgres};
 
-use crate::{
-    error,
-    routes::{game::WsMsg, user::jwt::Claims},
-    GlobalState, ServerState,
-};
+use crate::{error, routes::user::jwt::Claims, GlobalState, ServerState};
 
 use super::{
-    gameplay,
-    rules::{ChessBoard, PieceColor},
-    MatchmakingState, OpenGame, PlayerStreams,
+    chessboard::ChessBoard, gameplay, piece::PieceColor, ws_messages::WsMsg, MatchmakingState,
+    OpenGame, PlayerStreams,
 };
 
 #[derive(Serialize, Deserialize, Clone)]

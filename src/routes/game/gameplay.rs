@@ -3,32 +3,11 @@ use std::sync::Arc;
 use anyhow::{anyhow, bail};
 use axum::extract::ws::Message;
 use futures::{lock::Mutex, SinkExt, StreamExt};
-use serde::{Deserialize, Serialize};
 
-use super::position::Position;
+use super::piece::PieceColor;
 
-use super::{rules::PieceColor, OpenGame, SinkStream, SplitSink, SplitStream, WsMsg};
-
-#[derive(Deserialize, Debug, Serialize, Clone)]
-pub struct ChessMove {
-    position_from: Position,
-    position_to: Position,
-}
-
-#[derive(Deserialize, Debug)]
-pub(crate) enum GameMsgRecv {
-    TurnEnd(ChessMove),
-    Ack,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) enum GameMessage {
-    NewTurn(bool),
-    Error(String),
-    MovedCorrectly(Option<(PieceColor, Position)>),
-    GameEnd(bool),
-    PawnMove(ChessMove, Option<(PieceColor, Position)>),
-}
+use super::ws_messages::{ChessMove, GameMessage, GameMsgRecv, WsMsg};
+use super::{OpenGame, SinkStream, SplitSink, SplitStream};
 
 pub struct Gameplay {
     game: OpenGame,
