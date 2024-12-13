@@ -63,10 +63,6 @@ impl ChessBoard {
     }
 
     pub fn is_path_clear(&self, from: &Position, to: &Position) -> bool {
-        let from_row = from.row;
-        let to_row = to.row;
-        let from_col = from.column;
-        let to_col = to.column;
         // Movement in the same column
         if from.column == to.column {
             for piece in self.pieces.iter() {
@@ -74,7 +70,7 @@ impl ChessBoard {
                     continue;
                 }
                 let row = piece.position.row;
-                if (row > from_row && row < to_row) || (row > to_row && row < from_row) {
+                if (row > from.row && row < to.row) || (row > to.row && row < from.row) {
                     return false;
                 }
             }
@@ -86,24 +82,25 @@ impl ChessBoard {
                     continue;
                 }
                 let col = piece.position.column;
-                if (col > from_col && col < to_col) || (col > to_col && col < from_col) {
+                if (col > from.column && col < to.column) || (col > to.column && col < from.column)
+                {
                     return false;
                 }
             }
         };
         // Diagonal
-        let diff_col = (from_col - to_col).abs();
-        let diff_row = (from_row - to_row).abs();
+        let diff_col = (from.column - to.column).abs();
+        let diff_row = (from.row - to.row).abs();
         if diff_col == diff_row {
             for i in 1..diff_col {
-                let pos = if from_col < to_col && from_row < to_row {
-                    (from_col + i, from_row + i)
-                } else if from_col < to_col && from_row > to_row {
-                    (from_col + i, from_row - i)
-                } else if from_col > to_col && from_row < to_row {
-                    (from_col - i, from_row + i)
+                let pos = if from.column < to.column && from.row < to.row {
+                    (from.column + i, from.row + i)
+                } else if from.column < to.column && from.row > to.row {
+                    (from.column + i, from.row - i)
+                } else if from.column > to.column && from.row < to.row {
+                    (from.column - i, from.row + i)
                 } else {
-                    (from_col - i, from_row - i)
+                    (from.column - i, from.row - i)
                 };
                 if self
                     .pieces
