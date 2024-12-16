@@ -1,31 +1,15 @@
 use axum::{routing::get, Router};
-use chessboard::ChessBoard;
-use matchmaking::Game;
-use ws::GameWs;
 
 use crate::ServerState;
 
 pub mod chessboard;
 pub mod gameplay;
 pub mod matchmaking;
+pub mod opponent_pair;
 pub mod piece;
 pub mod position;
 pub mod ws;
 pub mod ws_messages;
-
-// player tx, rx
-#[derive(Debug)]
-pub struct PlayerStreams {
-    pub white_player: GameWs,
-    pub black_player: GameWs,
-}
-
-#[derive(Debug)]
-pub struct OpenGame {
-    pub game_data: Game,
-    pub chess_board: ChessBoard,
-    pub user_stream: PlayerStreams,
-}
 
 pub fn routes() -> Router<ServerState> {
     Router::new()

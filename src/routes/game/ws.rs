@@ -6,6 +6,7 @@ use futures::{
     stream::{SplitSink, SplitStream},
     SinkExt, StreamExt,
 };
+use serde::Serialize;
 use tokio::sync::Mutex;
 
 #[derive(Debug, Clone)]
@@ -40,5 +41,11 @@ impl GameWs {
             .send(message)
             .await
             .map_err(|err| anyhow!(err))
+    }
+
+    pub async fn send_as_text<T: Sized + Serialize>(&self, message: &T) -> anyhow::Result<()> {
+        let serialized = serde_json::to_string(message)?;
+        let message = Message::Text(serialized);
+        self.send(message).await
     }
 }

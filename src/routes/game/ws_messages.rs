@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{matchmaking::ws_handler::MatchmakingServerMsg, piece::PieceColor, position::Position};
 
-#[derive(Deserialize, Debug, Serialize, Clone)]
+#[derive(Deserialize, Debug, Serialize, Clone, Copy)]
 pub struct ChessMove {
     pub position_from: Position,
     pub position_to: Position,

@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use anyhow::anyhow;
 use axum::{
     debug_handler,
@@ -16,8 +14,8 @@ use sqlx::{Pool, Postgres};
 use crate::{
     routes::{
         game::{
-            chessboard::ChessBoard, gameplay::Gameplay, piece::PieceColor, ws::GameWs,
-            ws_messages::ServerMsg, OpenGame, PlayerStreams,
+            gameplay::Gameplay, opponent_pair::OpponentPair, piece::PieceColor, ws::GameWs,
+            ws_messages::ServerMsg,
         },
         user::jwt::Claims,
     },
@@ -33,6 +31,7 @@ use super::{
 pub(crate) enum MatchmakingServerMsg {
     Searching,
     Success { color: PieceColor },
+    Error(String),
 }
 
 #[debug_handler(state=ServerState)]
@@ -65,87 +64,86 @@ pub async fn handle_ws(
         }
     };
 
-    // create an on_message handler
-    let echo_task = Arc::new(tokio::spawn(ws_matchmaking(
-        ws.clone(),
-        user_queue.clone(),
-        claims.sub,
-    )));
-
-    // Insert this user into the queue with send, receive, and on_message handler
-    user_queue.get().await.insert(
-        claims.sub,
-        MatchmakingPlayer::new(ws.clone(), echo_task.clone()),
-    );
-    // check if we have 2 players. if so, start game.
-    let users_in_queue = user_queue
-        .get()
+    let user_in_queue = user_queue
+        .state
+        .lock()
         .await
+        .make_contiguous()
         .iter()
-        .find(|(id, _)| **id != claims.sub)
-        .map(|(id, tx)| (*id, tx.clone()));
-    if let Some((opponent_id, opponent_state)) = users_in_queue {
-        // Found 2 users, generating new game
-        let Ok(game_data) = create_game(&db_pool, claims.sub, opponent_id).await else {
-            return;
-        };
-        let Ok(chess_board) = ChessBoard::new() else {
-            return;
-        };
-        let open_game = OpenGame {
-            game_data: game_data.clone(),
-            chess_board,
-            user_stream: PlayerStreams {
-                white_player: opponent_state.ws.clone(),
-                black_player: ws.clone(),
-            },
-        };
-        // Inform the clients of the new game
-        // Send the JSON as text message to both players
-        let Ok(_) = [
-            ws.send(Message::Text(
-                serde_json::to_string(&ServerMsg::Matchmaking(MatchmakingServerMsg::Success {
-                    color: PieceColor::Black,
-                }))
-                .unwrap(),
-            ))
-            .await,
-            opponent_state
-                .ws
-                .send(Message::Text(
-                    serde_json::to_string(&ServerMsg::Matchmaking(MatchmakingServerMsg::Success {
-                        color: PieceColor::White,
-                    }))
-                    .unwrap(),
-                ))
-                .await,
-        ]
-        .into_iter()
-        .collect::<Result<Vec<()>, _>>() else {
-            return;
-        };
-
-        // Stop the echo services
-        opponent_state.echo_task.abort();
-        echo_task.abort();
-
-        // Start the game :D
-        let _ = Gameplay::new(open_game).run().await;
+        .any(|user| user.id == claims.sub);
+    if user_in_queue {
+        ws.send_as_text(&MatchmakingServerMsg::Error(
+            "User already in the queue".into(),
+        ))
+        .await
+        .unwrap();
+        return;
     }
+
+    // Create a service for matchmaking player
+    let echo_task = tokio::spawn(ws_matchmaking(ws.clone(), user_queue.clone(), claims.sub));
+    let matchmaking_player = MatchmakingPlayer::new(claims.sub, ws, echo_task);
+    // check if we have 2 players. if so, start game.
+    let matchmaking_opponent = match user_queue.pop().await {
+        // Push user into queue and return. We do not need to continue the function.
+        None => {
+            matchmaking_player
+                .ws
+                .send_as_text(&MatchmakingServerMsg::Searching)
+                .await
+                .unwrap();
+            user_queue.push(matchmaking_player).await;
+            return;
+        }
+        // Opponent for current player found!
+        Some(player) => player,
+    };
+    // Insert info about the new game into the database
+    let Ok(game_data) = create_game(&db_pool, matchmaking_player.id, matchmaking_opponent.id).await
+    else {
+        return;
+    };
+    // Inform the players of the new game
+    let _ = matchmaking_player
+        .ws
+        .send_as_text(&ServerMsg::Matchmaking(MatchmakingServerMsg::Success {
+            color: PieceColor::Black,
+        }))
+        .await;
+    let _ = matchmaking_opponent
+        .ws
+        .send_as_text(&ServerMsg::Matchmaking(MatchmakingServerMsg::Success {
+            color: PieceColor::White,
+        }))
+        .await;
+
+    // Stop the echo services
+    matchmaking_player.echo.abort();
+    matchmaking_opponent.echo.abort();
+
+    // Start the game :D
+    let mut open_game = Gameplay::new(
+        game_data,
+        OpponentPair::new(matchmaking_opponent.ws, matchmaking_player.ws),
+    );
+    tokio::spawn(async move { open_game.run().await.unwrap() });
 }
 
 async fn ws_matchmaking(ws: GameWs, user_queue: UserQueue, user_id: i32) {
     while let Ok(message) = ws.get().await {
         if let Message::Close(_) = message {
-            user_queue.get().await.remove(&user_id);
+            let user_index = user_queue
+                .state
+                .lock()
+                .await
+                .iter()
+                .position(|player| player.id == user_id);
+            let Some(user_index) = user_index else {
+                continue;
+            };
+            user_queue.state.lock().await.remove(user_index);
             return;
         }
-        let msg = MatchmakingServerMsg::Searching;
-        let msg = ServerMsg::Matchmaking(msg);
-        let msg = serde_json::to_string(&msg);
-        let msg = msg.unwrap_or_default();
-        let msg = Message::Text(msg);
-        ws.send(msg).await.unwrap();
     }
 }
 

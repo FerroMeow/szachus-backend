@@ -13,7 +13,7 @@ pub enum PieceType {
     Pawn,
 }
 
-#[derive(PartialEq, Clone, Serialize, Deserialize, Debug)]
+#[derive(PartialEq, Clone, Copy, Serialize, Deserialize, Debug)]
 pub enum PieceColor {
     White,
     Black,
@@ -36,27 +36,26 @@ pub struct Piece {
 }
 
 impl Piece {
-    pub fn new(piece_type: PieceType, color: PieceColor, column: i8) -> anyhow::Result<Piece> {
+    pub fn new(piece_type: PieceType, color: PieceColor, column: i8) -> Piece {
         let row = match (&piece_type, &color) {
             (PieceType::Pawn, PieceColor::White) => 1,
             (PieceType::Pawn, PieceColor::Black) => 6,
             (_, PieceColor::White) => 0,
             (_, PieceColor::Black) => 7,
         };
-        Ok(Piece {
+        Piece {
             piece_type,
             color,
             position: Position::new(column, row),
             times_moved: 0,
-        })
+        }
     }
 
-    pub async fn move_piece_to(&mut self, new_position: &Position) -> anyhow::Result<()> {
-        let position_difference = new_position.clone() - self.position.clone();
+    pub async fn move_piece_to(&mut self, new_position: Position) -> anyhow::Result<()> {
+        let position_difference = new_position - self.position;
         match self.piece_type {
             PieceType::Pawn => {
-                self.pawn_move(new_position.clone(), position_difference)
-                    .await?;
+                self.pawn_move(new_position, position_difference).await?;
                 match self.color {
                     PieceColor::White if new_position.row == 7 => {
                         self.piece_type = PieceType::Queen;
@@ -97,7 +96,7 @@ impl Piece {
                 }
             }
         };
-        self.position = new_position.clone();
+        self.position = new_position;
         self.times_moved += 1;
         Ok(())
     }

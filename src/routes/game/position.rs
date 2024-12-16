@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(PartialEq, Clone, Serialize, Deserialize, Debug)]
+#[derive(PartialEq, Clone, Copy, Serialize, Deserialize, Debug)]
 pub struct Position {
     pub column: i8,
     pub row: i8,

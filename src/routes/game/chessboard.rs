@@ -11,42 +11,32 @@ pub struct ChessBoard {
 }
 
 impl ChessBoard {
-    pub fn new() -> anyhow::Result<Self> {
-        let pieces = [PieceColor::White, PieceColor::Black]
-            .into_iter()
-            .map(|color| {
-                (0..8)
-                    .map(|column| Piece::new(PieceType::Pawn, color.clone(), column))
-                    .chain(
-                        [
-                            Piece::new(PieceType::Rook, color.clone(), 0),
-                            Piece::new(PieceType::Rook, color.clone(), 7),
-                            Piece::new(PieceType::Knight, color.clone(), 1),
-                            Piece::new(PieceType::Knight, color.clone(), 6),
-                            Piece::new(PieceType::Bishop, color.clone(), 2),
-                            Piece::new(PieceType::Bishop, color.clone(), 5),
-                            Piece::new(PieceType::Queen, color.clone(), 3),
-                            Piece::new(PieceType::King, color.clone(), 4),
-                        ]
-                        .into_iter(),
-                    )
-                    .collect::<Result<Vec<_>, _>>()
-            })
-            .collect::<Result<Vec<_>, _>>()?
-            .into_iter()
-            .flatten()
-            .collect::<Vec<_>>();
-        Ok(Self { pieces })
+    pub fn new() -> Self {
+        let mut pieces: Vec<Piece> = Vec::with_capacity(32);
+        for color in [PieceColor::White, PieceColor::Black] {
+            for column in 0..8 {
+                pieces.push(Piece::new(PieceType::Pawn, color, column));
+            }
+            pieces.push(Piece::new(PieceType::Rook, color, 0));
+            pieces.push(Piece::new(PieceType::Rook, color, 7));
+            pieces.push(Piece::new(PieceType::Knight, color, 1));
+            pieces.push(Piece::new(PieceType::Knight, color, 6));
+            pieces.push(Piece::new(PieceType::Bishop, color, 2));
+            pieces.push(Piece::new(PieceType::Bishop, color, 5));
+            pieces.push(Piece::new(PieceType::Queen, color, 3));
+            pieces.push(Piece::new(PieceType::King, color, 4));
+        }
+        Self { pieces }
     }
 
     pub fn find_own_piece_at_mut(
         &mut self,
-        position: &Position,
+        position: Position,
         color: &PieceColor,
     ) -> Option<&mut Piece> {
         self.pieces
             .iter_mut()
-            .find(move |piece| piece.position == *position && piece.color == *color)
+            .find(move |piece| piece.position == position && piece.color == *color)
     }
 
     pub fn find_king(&self, color: PieceColor) -> Option<&Piece> {
@@ -55,14 +45,14 @@ impl ChessBoard {
             .find(|piece| piece.color == color && piece.piece_type == PieceType::King)
     }
 
-    pub fn remove_piece(&mut self, position: &Position, color: &PieceColor) -> Option<Piece> {
+    pub fn remove_piece(&mut self, position: Position, color: &PieceColor) -> Option<Piece> {
         let position = self.pieces.iter().position(move |current_piece| {
-            current_piece.position == *position && current_piece.color == *color
+            current_piece.position == position && current_piece.color == *color
         })?;
         Some(self.pieces.swap_remove(position))
     }
 
-    pub fn is_path_clear(&self, from: &Position, to: &Position) -> bool {
+    pub fn is_path_clear(&self, from: Position, to: Position) -> bool {
         // Movement in the same column
         if from.column == to.column {
             for piece in self.pieces.iter() {
@@ -117,8 +107,8 @@ impl ChessBoard {
     pub async fn move_piece(
         &mut self,
         player_color: &PieceColor,
-        from: &Position,
-        to: &Position,
+        from: Position,
+        to: Position,
     ) -> anyhow::Result<Option<Piece>> {
         if !self.is_path_clear(from, to) {
             bail!("The path is currently occupied");

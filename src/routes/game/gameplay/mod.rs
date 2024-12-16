@@ -1,16 +1,19 @@
 use anyhow::bail;
 use axum::extract::ws::Message;
 
+use super::chessboard::ChessBoard;
+use super::matchmaking::Game;
+use super::opponent_pair::OpponentPair;
 use super::piece::PieceColor;
 
 use super::ws::GameWs;
 use super::ws_messages::{ChessMove, GameClientMsg, GameServerMsg, ServerMsg};
-use super::OpenGame;
 
+#[derive(Debug)]
 pub struct Gameplay {
-    game: OpenGame,
-    active_player: (PieceColor, GameWs),
-    passive_player: (PieceColor, GameWs),
+    game_data: Game,
+    chess_board: ChessBoard,
+    players: OpponentPair,
 }
 
 impl Gameplay {
@@ -28,27 +31,76 @@ impl Gameplay {
             .await
     }
 
+    pub fn new(game_data: Game, players: OpponentPair) -> Self {
+        Self {
+            game_data,
+            chess_board: ChessBoard::new(),
+            players,
+        }
+    }
+
     async fn ws_send_active(&mut self, msg: GameServerMsg) -> anyhow::Result<()> {
-        Self::ws_send(&self.active_player.1, msg).await
+        Self::ws_send(self.players.get_active(), msg).await
     }
 
     async fn ws_send_passive(&mut self, msg: GameServerMsg) -> anyhow::Result<()> {
-        Self::ws_send(&self.passive_player.1, msg).await
+        Self::ws_send(self.players.get_passive(), msg).await
     }
 
     async fn ws_next_active(&mut self) -> anyhow::Result<GameClientMsg> {
-        Self::ws_next(&self.active_player.1).await
+        Self::ws_next(self.players.get_active()).await
     }
 
     async fn ws_next_passive(&mut self) -> anyhow::Result<GameClientMsg> {
-        Self::ws_next(&self.passive_player.1).await
+        Self::ws_next(self.players.get_passive()).await
     }
 
-    pub fn new(game: OpenGame) -> Self {
-        Self {
-            active_player: (PieceColor::White, game.user_stream.white_player.clone()),
-            passive_player: (PieceColor::Black, game.user_stream.black_player.clone()),
-            game,
+    async fn handle_turn_end(&mut self, piece_move: ChessMove) -> anyhow::Result<()> {
+        let removed_piece_maybe = self
+            .chess_board
+            .move_piece(
+                &self.players.current_player_color,
+                piece_move.position_from,
+                piece_move.position_to,
+            )
+            .await?;
+        let removed_piece_to = removed_piece_maybe.map(|lock| (lock.color, piece_move.position_to));
+        self.ws_send_active(GameServerMsg::MovedCorrectly(removed_piece_to))
+            .await?;
+        self.ws_send_passive(GameServerMsg::PawnMove(piece_move, removed_piece_to))
+            .await?;
+        Ok(())
+    }
+
+    async fn switch_turns(&mut self) -> anyhow::Result<()> {
+        self.players.switch_active();
+        self.ws_send_active(GameServerMsg::NewTurn(true)).await?;
+        self.ws_send_passive(GameServerMsg::NewTurn(false)).await?;
+        Ok(())
+    }
+
+    async fn handle_win(&mut self) -> anyhow::Result<bool> {
+        let white_king = self.chess_board.find_king(PieceColor::White);
+        let black_king = self.chess_board.find_king(PieceColor::Black);
+        let winning_king = match (white_king, black_king) {
+            (None, Some(_)) => Some(PieceColor::Black),
+            (Some(_), None) => Some(PieceColor::White),
+            (Some(_), Some(_)) => None,
+            (None, None) => {
+                bail!("There is no king on the field! The game encountered a critical error");
+            }
+        };
+        if let Some(winning_color) = winning_king {
+            let (winner, loser) = if self.players.current_player_color == winning_color {
+                (self.players.get_active(), self.players.get_passive())
+            } else {
+                (self.players.get_passive(), self.players.get_active())
+            };
+            Self::ws_send(winner, GameServerMsg::GameEnd(true)).await?;
+            Self::ws_send(loser, GameServerMsg::GameEnd(false)).await?;
+            Ok(true)
+        } else {
+            Ok(false)
         }
     }
 
@@ -102,56 +154,5 @@ impl Gameplay {
             };
         }
         Ok(())
-    }
-
-    async fn handle_turn_end(&mut self, piece_move: ChessMove) -> anyhow::Result<()> {
-        let removed_piece_maybe = self
-            .game
-            .chess_board
-            .move_piece(
-                &self.active_player.0,
-                &piece_move.position_from,
-                &piece_move.position_to,
-            )
-            .await?;
-        let removed_piece_to =
-            removed_piece_maybe.map(|lock| (lock.color.clone(), piece_move.clone().position_to));
-        self.ws_send_active(GameServerMsg::MovedCorrectly(removed_piece_to.clone()))
-            .await?;
-        self.ws_send_passive(GameServerMsg::PawnMove(piece_move, removed_piece_to))
-            .await?;
-        Ok(())
-    }
-
-    async fn switch_turns(&mut self) -> anyhow::Result<()> {
-        std::mem::swap(&mut self.active_player, &mut self.passive_player);
-        self.ws_send_active(GameServerMsg::NewTurn(true)).await?;
-        self.ws_send_passive(GameServerMsg::NewTurn(false)).await?;
-        Ok(())
-    }
-
-    async fn handle_win(&mut self) -> anyhow::Result<bool> {
-        let white_king = self.game.chess_board.find_king(PieceColor::White);
-        let black_king = self.game.chess_board.find_king(PieceColor::Black);
-        let winning_king = match (white_king, black_king) {
-            (None, Some(_)) => Some(PieceColor::Black),
-            (Some(_), None) => Some(PieceColor::White),
-            (Some(_), Some(_)) => None,
-            (None, None) => {
-                bail!("There is no king on the field! The game encountered a critical error");
-            }
-        };
-        if let Some(winning_color) = winning_king {
-            let (winner, loser) = if self.active_player.0 == winning_color {
-                (self.active_player.clone(), self.passive_player.clone())
-            } else {
-                (self.passive_player.clone(), self.active_player.clone())
-            };
-            Self::ws_send(&winner.1, GameServerMsg::GameEnd(true)).await?;
-            Self::ws_send(&loser.1, GameServerMsg::GameEnd(false)).await?;
-            Ok(true)
-        } else {
-            Ok(false)
-        }
     }
 }

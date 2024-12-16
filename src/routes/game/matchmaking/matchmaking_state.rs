@@ -1,33 +1,34 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::VecDeque, sync::Arc};
 
 use axum::extract::FromRef;
-use tokio::{
-    sync::{Mutex, MutexGuard},
-    task::JoinHandle,
-};
+use tokio::{sync::Mutex, task::JoinHandle};
 
 use crate::{routes::game::ws::GameWs, ServerState};
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct MatchmakingPlayer {
+    pub id: i32,
     pub ws: GameWs,
-    pub echo_task: Arc<JoinHandle<()>>,
+    pub echo: JoinHandle<()>,
 }
 
 impl MatchmakingPlayer {
-    pub fn new(ws: GameWs, echo_task: Arc<JoinHandle<()>>) -> Self {
-        MatchmakingPlayer { ws, echo_task }
+    pub fn new(id: i32, ws: GameWs, echo: JoinHandle<()>) -> Self {
+        MatchmakingPlayer { id, ws, echo }
     }
 }
 
 #[derive(Default, Clone, Debug)]
 pub struct UserQueue {
-    state: Arc<Mutex<HashMap<i32, MatchmakingPlayer>>>,
+    pub state: Arc<Mutex<VecDeque<MatchmakingPlayer>>>,
 }
 
 impl UserQueue {
-    pub async fn get(&self) -> MutexGuard<HashMap<i32, MatchmakingPlayer>> {
-        self.state.lock().await
+    pub async fn push(&self, matchmaking_player: MatchmakingPlayer) {
+        self.state.lock().await.push_back(matchmaking_player);
+    }
+    pub async fn pop(&self) -> Option<MatchmakingPlayer> {
+        self.state.lock().await.pop_front()
     }
 }
 
