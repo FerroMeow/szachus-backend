@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::{piece::PieceColor, position::Position, MatchmakingServerMsg};
+use super::{matchmaking::ws_handler::MatchmakingServerMsg, piece::PieceColor, position::Position};
 
 #[derive(Deserialize, Debug, Serialize, Clone)]
 pub struct ChessMove {
