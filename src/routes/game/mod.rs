@@ -14,11 +14,13 @@ pub mod ws;
 pub mod ws_messages;
 
 // player tx, rx
+#[derive(Debug)]
 pub struct PlayerStreams {
     pub white_player: GameWs,
     pub black_player: GameWs,
 }
 
+#[derive(Debug)]
 pub struct OpenGame {
     pub game_data: Game,
     pub chess_board: ChessBoard,

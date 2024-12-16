@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 pub mod matchmaking_state;
 pub mod ws_handler;
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Game {
     id: i32,
     started_at: NaiveDateTime,
