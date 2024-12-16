@@ -1,6 +1,6 @@
 use std::mem;
 
-use super::{piece::PieceColor, ws::GameWs};
+use super::{piece_color::PieceColor, ws::GameWs};
 
 #[derive(Debug)]
 pub struct OpponentPair {

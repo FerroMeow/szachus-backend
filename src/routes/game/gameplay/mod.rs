@@ -1,13 +1,19 @@
 use anyhow::bail;
 use axum::extract::ws::Message;
+use chessboard::ChessBoard;
+use ws_message::GameServerMsg;
 
-use super::chessboard::ChessBoard;
-use super::matchmaking::Game;
+use super::matchmaking::db::Game;
 use super::opponent_pair::OpponentPair;
-use super::piece::PieceColor;
 
+use super::piece_color::PieceColor;
 use super::ws::GameWs;
-use super::ws_messages::{ChessMove, GameClientMsg, GameServerMsg, ServerMsg};
+use super::ws_messages::{ChessMove, GameClientMsg, ServerMsg};
+
+pub mod chessboard;
+pub mod piece;
+pub mod position;
+pub mod ws_message;
 
 #[derive(Debug)]
 pub struct Gameplay {
