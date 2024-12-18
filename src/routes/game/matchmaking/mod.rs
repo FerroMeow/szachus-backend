@@ -106,13 +106,14 @@ pub async fn handle_ws(
     // Stop the echo services
     matchmaking_player.echo.abort();
     matchmaking_opponent.echo.abort();
-
-    // Start the game :D
-    let mut open_game = Gameplay::new(
-        game_data,
-        OpponentPair::new(matchmaking_opponent.ws, matchmaking_player.ws),
-    );
-    tokio::spawn(async move { open_game.run().await.unwrap() });
+    tokio::spawn(async move {
+        // Start the game :D
+        let mut open_game = Gameplay::new(
+            game_data,
+            OpponentPair::new(matchmaking_opponent.ws, matchmaking_player.ws),
+        );
+        let _ = open_game.run().await;
+    });
 }
 
 async fn ws_matchmaking(ws: GameWs, user_queue: UserQueue, user_id: i32) {

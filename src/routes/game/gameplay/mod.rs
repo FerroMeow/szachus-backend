@@ -94,8 +94,8 @@ impl Gameplay {
 
     async fn switch_turns(&mut self) -> anyhow::Result<()> {
         self.players.switch_active();
-        self.ws_send_active(GameServerMsg::NewTurn(true)).await?;
-        self.ws_send_passive(GameServerMsg::NewTurn(false)).await?;
+        let _ = self.ws_send_active(GameServerMsg::NewTurn(true)).await;
+        let _ = self.ws_send_passive(GameServerMsg::NewTurn(false)).await;
         Ok(())
     }
 
@@ -126,7 +126,7 @@ impl Gameplay {
 
     pub async fn run(&mut self) -> anyhow::Result<()> {
         // Wait for both players to acknowledge their involvement
-        if !matches!(self.ws_next_active().await?, GameClientMsg::Ack) {
+        let Ok(GameClientMsg::Ack) = self.ws_next_active().await else {
             bail!("No white player ack");
         };
         if !matches!(self.ws_next_passive().await?, GameClientMsg::Ack) {
@@ -135,24 +135,12 @@ impl Gameplay {
         self.ws_send_active(GameServerMsg::NewTurn(true)).await?;
         self.ws_send_passive(GameServerMsg::NewTurn(false)).await?;
         loop {
-            let player_msg = loop {
-                let player_msg = match self.ws_next_active().await {
-                    Ok(msg) => msg,
-                    Err(err) => {
-                        self.ws_send_active(GameServerMsg::Error(format!("{:?}", err)))
-                            .await?;
-                        continue;
-                    }
-                };
-                break player_msg;
-            };
-            match player_msg {
+            match self.ws_next_active().await? {
                 GameClientMsg::TurnEnd(piece_move) => {
                     if let Err(error) = self.handle_turn_end(piece_move).await {
                         println!("Error: {:?}", error);
                         self.ws_send_active(GameServerMsg::Error(format!("{:?}", error)))
                             .await?;
-                        continue;
                     };
                 }
                 GameClientMsg::Ack => {
