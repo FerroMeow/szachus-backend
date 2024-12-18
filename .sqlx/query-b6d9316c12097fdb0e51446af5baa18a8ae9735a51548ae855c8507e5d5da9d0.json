@@ -1,55 +1,56 @@
 {
   "db_name": "PostgreSQL",
-  "query": "INSERT INTO game_turn (game, player_color, tile_from, tile_to, pawn_moved) VALUES ($1, $2, $3, $4, $5) RETURNING *",
+  "query": "INSERT INTO game_turn (game, turn_nr, player_color, tile_from, tile_to, pawn_moved) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "game",
-        "type_info": "Int4"
-      },
-      {
-        "ordinal": 1,
-        "name": "player_color",
-        "type_info": "Int2"
-      },
-      {
-        "ordinal": 2,
-        "name": "tile_from",
-        "type_info": "Varchar"
-      },
-      {
-        "ordinal": 3,
-        "name": "tile_to",
-        "type_info": "Varchar"
-      },
-      {
-        "ordinal": 4,
-        "name": "pawn_moved",
-        "type_info": "Varchar"
-      },
-      {
-        "ordinal": 5,
         "name": "id",
         "type_info": "Int4"
       },
       {
-        "ordinal": 6,
+        "ordinal": 1,
         "name": "turn_nr",
         "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "game",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "player_color",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "tile_from",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 5,
+        "name": "tile_to",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 6,
+        "name": "pawn_moved",
+        "type_info": "Varchar"
       }
     ],
     "parameters": {
       "Left": [
         "Int4",
-        "Int2",
+        "Int4",
+        "Varchar",
         "Varchar",
         "Varchar",
         "Varchar"
       ]
     },
     "nullable": [
-      true,
+      false,
       false,
       false,
       false,
@@ -58,5 +59,5 @@
       false
     ]
   },
-  "hash": "e0e44e8d518742046f5e2b77e07ad2b20f4d182c80f90dcf827cd4bea45e8840"
+  "hash": "b6d9316c12097fdb0e51446af5baa18a8ae9735a51548ae855c8507e5d5da9d0"
 }

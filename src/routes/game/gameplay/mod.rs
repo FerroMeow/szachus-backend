@@ -24,6 +24,7 @@ pub struct Gameplay {
     pub game_data: Game,
     chess_board: ChessBoard,
     pub players: OpponentPair,
+    turn_number: i32,
 }
 
 impl Gameplay {
@@ -47,6 +48,7 @@ impl Gameplay {
             game_data,
             chess_board: ChessBoard::new(),
             players,
+            turn_number: 1,
         }
     }
 
@@ -80,6 +82,7 @@ impl Gameplay {
         GameTurn::create(
             &self.db_pool,
             &self.game_data,
+            self.turn_number,
             player_color,
             piece_move.position_from,
             piece_move.position_to,
@@ -109,6 +112,7 @@ impl Gameplay {
         self.players.switch_active();
         let _ = self.ws_send_active(GameServerMsg::NewTurn(true)).await;
         let _ = self.ws_send_passive(GameServerMsg::NewTurn(false)).await;
+        self.turn_number += 1;
         Ok(())
     }
 
@@ -153,6 +157,7 @@ impl Gameplay {
                     if let Err(error) = self.handle_turn_end(piece_move).await {
                         self.ws_send_active(GameServerMsg::Error(format!("{:?}", error)))
                             .await?;
+                        continue;
                     };
                 }
                 GameClientMsg::Ack => {

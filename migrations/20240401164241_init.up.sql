@@ -14,12 +14,12 @@ CREATE TABLE game (
   player_white int REFERENCES player NOT NULL
 );
 CREATE TABLE game_turn (
-  game int REFERENCES game,
-  player_color smallint CHECK(
-    player_color >= 0
-    OR player_color <= 1
-  ),
+  id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  turn_nr INT NOT NULL,
+  game int NOT NULL,
+  player_color varchar(5) NOT NULL,
   tile_from varchar(2) NOT NULL,
   tile_to varchar(2) NOT NULL,
-  pawn_moved varchar(12) NOT NULL
+  pawn_moved varchar(12) NOT NULL,
+  FOREIGN KEY (game) REFERENCES game ON DELETE CASCADE ON UPDATE CASCADE
 );
