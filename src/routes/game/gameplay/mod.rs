@@ -62,18 +62,32 @@ impl Gameplay {
     }
 
     async fn handle_turn_end(&mut self, piece_move: ChessMove) -> anyhow::Result<()> {
+        let player_color = self.players.current_player_color;
+        println!("Current color: {player_color:?}");
+        let piece_move = piece_move.maybe_invert(player_color);
         let removed_piece_maybe = self
             .chess_board
             .move_piece(
-                &self.players.current_player_color,
+                player_color,
                 piece_move.position_from,
                 piece_move.position_to,
             )
             .await?;
-        let removed_piece_to = removed_piece_maybe.map(|lock| (lock.color, piece_move.position_to));
-        self.ws_send_active(GameServerMsg::MovedCorrectly(removed_piece_to))
+        let removed_piece_to =
+            removed_piece_maybe.map(|piece| (piece.color, piece_move.position_to));
+        self.players
+            .white_player
+            .send_as_text(&ServerMsg::Game(GameServerMsg::PawnMove(
+                piece_move,
+                removed_piece_to,
+            )))
             .await?;
-        self.ws_send_passive(GameServerMsg::PawnMove(piece_move, removed_piece_to))
+        self.players
+            .black_player
+            .send_as_text(&ServerMsg::Game(GameServerMsg::PawnMove(
+                piece_move.invert(),
+                removed_piece_to.map(|to| (to.0, to.1.invert())),
+            )))
             .await?;
         Ok(())
     }

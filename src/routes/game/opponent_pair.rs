@@ -1,5 +1,3 @@
-use std::mem;
-
 use super::{piece_color::PieceColor, ws::GameWs};
 
 #[derive(Debug)]
@@ -33,7 +31,7 @@ impl OpponentPair {
     }
 
     pub fn switch_active(&mut self) -> &mut Self {
-        mem::swap(&mut self.white_player, &mut self.black_player);
+        self.current_player_color = self.current_player_color.invert();
         self
     }
 }

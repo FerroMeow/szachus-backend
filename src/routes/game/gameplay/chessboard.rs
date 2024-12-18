@@ -31,14 +31,10 @@ impl ChessBoard {
         Self { pieces }
     }
 
-    pub fn find_own_piece_at_mut(
-        &mut self,
-        position: Position,
-        color: &PieceColor,
-    ) -> Option<&mut Piece> {
+    pub fn find_own_piece_at_mut(&mut self, position: Position) -> Option<&mut Piece> {
         self.pieces
             .iter_mut()
-            .find(move |piece| piece.position == position && piece.color == *color)
+            .find(move |piece| piece.position == position)
     }
 
     pub fn find_king(&self, color: PieceColor) -> Option<&Piece> {
@@ -47,9 +43,10 @@ impl ChessBoard {
             .find(|piece| piece.color == color && piece.piece_type == PieceType::King)
     }
 
-    pub fn remove_piece(&mut self, position: Position, color: &PieceColor) -> Option<Piece> {
+    pub fn remove_piece(&mut self, position: Position, color: PieceColor) -> Option<Piece> {
+        println!("Trying to remove a {color:?} piece at {position:?}");
         let position = self.pieces.iter().position(move |current_piece| {
-            current_piece.position == position && current_piece.color == *color
+            current_piece.position == position && current_piece.color == color
         })?;
         Some(self.pieces.swap_remove(position))
     }
@@ -108,16 +105,16 @@ impl ChessBoard {
 
     pub async fn move_piece(
         &mut self,
-        player_color: &PieceColor,
+        player_color: PieceColor,
         from: Position,
         to: Position,
     ) -> anyhow::Result<Option<Piece>> {
         if !self.is_path_clear(from, to) {
             bail!("The path is currently occupied");
         }
-        let piece = self.find_own_piece_at_mut(from, player_color);
-        let piece = piece.ok_or(anyhow!("You don't have a piece at this position!"))?;
+        let piece = self.find_own_piece_at_mut(from);
+        let piece = piece.ok_or(anyhow!("You don't have a piece at position {from:?}"))?;
         piece.move_piece_to(to).await?;
-        Ok(self.remove_piece(to, &player_color.invert()))
+        Ok(self.remove_piece(to, player_color.invert()))
     }
 }

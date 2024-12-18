@@ -8,7 +8,6 @@ use super::position::Position;
 pub(crate) enum GameServerMsg {
     NewTurn(bool),
     Error(String),
-    MovedCorrectly(Option<(PieceColor, Position)>),
     GameEnd(bool),
     PawnMove(ChessMove, Option<(PieceColor, Position)>),
 }
