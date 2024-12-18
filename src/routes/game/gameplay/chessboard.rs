@@ -107,13 +107,15 @@ impl ChessBoard {
         player_color: PieceColor,
         from: Position,
         to: Position,
-    ) -> anyhow::Result<Option<Piece>> {
+    ) -> anyhow::Result<(PieceType, Option<Piece>)> {
         if !self.is_path_clear(from, to) {
             bail!("The path is currently occupied");
         }
         let piece = self.find_own_piece_at_mut(from);
         let piece = piece.ok_or(anyhow!("You don't have a piece at position {from:?}"))?;
+        let piece_type = piece.piece_type;
         piece.move_piece_to(to).await?;
-        Ok(self.remove_piece(to, player_color.invert()))
+        let removed = self.remove_piece(to, player_color.invert());
+        Ok((piece_type, removed))
     }
 }

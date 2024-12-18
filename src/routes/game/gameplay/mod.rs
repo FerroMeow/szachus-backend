@@ -1,6 +1,8 @@
 use anyhow::bail;
 use axum::extract::ws::Message;
 use chessboard::ChessBoard;
+use db::GameTurn;
+use sqlx::{Pool, Postgres};
 use ws_message::GameServerMsg;
 
 use super::matchmaking::db::Game;
@@ -11,13 +13,15 @@ use super::ws::GameWs;
 use super::ws_messages::{ChessMove, GameClientMsg, ServerMsg};
 
 pub mod chessboard;
+pub mod db;
 pub mod piece;
 pub mod position;
 pub mod ws_message;
 
 #[derive(Debug)]
 pub struct Gameplay {
-    game_data: Game,
+    db_pool: Pool<Postgres>,
+    pub game_data: Game,
     chess_board: ChessBoard,
     pub players: OpponentPair,
 }
@@ -37,8 +41,9 @@ impl Gameplay {
             .await
     }
 
-    pub fn new(game_data: Game, players: OpponentPair) -> Self {
+    pub fn new(db_pool: Pool<Postgres>, game_data: Game, players: OpponentPair) -> Self {
         Self {
+            db_pool,
             game_data,
             chess_board: ChessBoard::new(),
             players,
@@ -64,7 +69,7 @@ impl Gameplay {
     async fn handle_turn_end(&mut self, piece_move: ChessMove) -> anyhow::Result<()> {
         let player_color = self.players.current_player_color;
         let piece_move = piece_move.maybe_invert(player_color);
-        let removed_piece_maybe = self
+        let (piece_type, removed_piece_maybe) = self
             .chess_board
             .move_piece(
                 player_color,
@@ -72,6 +77,15 @@ impl Gameplay {
                 piece_move.position_to,
             )
             .await?;
+        GameTurn::create(
+            &self.db_pool,
+            &self.game_data,
+            player_color,
+            piece_move.position_from,
+            piece_move.position_to,
+            piece_type,
+        )
+        .await?;
         let removed_piece_to =
             removed_piece_maybe.map(|piece| (piece.color, piece_move.position_to));
         self.players

@@ -1,0 +1,62 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO game_turn (game, player_color, tile_from, tile_to, pawn_moved) VALUES ($1, $2, $3, $4, $5) RETURNING *",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "game",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "player_color",
+        "type_info": "Int2"
+      },
+      {
+        "ordinal": 2,
+        "name": "tile_from",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "tile_to",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "pawn_moved",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 5,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 6,
+        "name": "turn_nr",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int2",
+        "Varchar",
+        "Varchar",
+        "Varchar"
+      ]
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "e0e44e8d518742046f5e2b77e07ad2b20f4d182c80f90dcf827cd4bea45e8840"
+}

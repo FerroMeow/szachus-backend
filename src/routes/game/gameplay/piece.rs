@@ -5,7 +5,7 @@ use crate::routes::game::piece_color::PieceColor;
 
 use super::position::Position;
 
-#[derive(PartialEq, Clone, Serialize, Deserialize, Debug)]
+#[derive(PartialEq, Clone, Copy, Serialize, Deserialize, Debug)]
 pub enum PieceType {
     Rook,
     Knight,
@@ -13,6 +13,19 @@ pub enum PieceType {
     Queen,
     King,
     Pawn,
+}
+
+impl PieceType {
+    pub fn get_name<'a>(&self) -> &'a str {
+        match *self {
+            PieceType::Pawn => "pawn",
+            PieceType::Bishop => "bishop",
+            PieceType::King => "king",
+            PieceType::Knight => "knight",
+            PieceType::Queen => "queen",
+            PieceType::Rook => "rook",
+        }
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]

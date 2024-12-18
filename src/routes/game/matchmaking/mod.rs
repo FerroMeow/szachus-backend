@@ -6,7 +6,7 @@ use axum::{
     },
     response::Response,
 };
-use db::create_game;
+use db::{create_game, remove_game, set_game_finished};
 use matchmaking_state::{MatchmakingPlayer, UserQueue};
 use ws_message::MatchmakingServerMsg;
 
@@ -106,6 +106,7 @@ pub async fn handle_ws(
     matchmaking_player.echo.abort();
     matchmaking_opponent.echo.abort();
     let mut open_game = Gameplay::new(
+        db_pool.clone(),
         game_data,
         OpponentPair::new(matchmaking_opponent.ws, matchmaking_player.ws),
     );
@@ -115,12 +116,18 @@ pub async fn handle_ws(
         // Check for errors
         if let Err(error) = game_result {
             // Game has encountered an error. Notify the active players.
-            // This operation will probably foil for one of them, so we ignore the errors, as this is an error handler.
             let error =
                 ServerMsg::Matchmaking(MatchmakingServerMsg::GameDropped(error.to_string()));
+            // This operation will probably foil for one of them, so we ignore the errors, as this is an error handler.
             let _ = open_game.players.white_player.send_as_text(&error).await;
             let _ = open_game.players.black_player.send_as_text(&error).await;
+            // We still want to panic on database errors though
+            remove_game(&db_pool, open_game.game_data).await.unwrap();
+            return;
         };
+        set_game_finished(&db_pool, open_game.game_data)
+            .await
+            .unwrap();
     });
 }
 

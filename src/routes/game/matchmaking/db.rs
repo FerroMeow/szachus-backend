@@ -1,11 +1,11 @@
 use anyhow::anyhow;
 use chrono::prelude::*;
 use serde::{Deserialize, Serialize};
-use sqlx::{Pool, Postgres};
+use sqlx::{postgres::PgQueryResult, Pool, Postgres};
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Game {
-    id: i32,
+    pub id: i32,
     started_at: NaiveDateTime,
     ended_at: Option<NaiveDateTime>,
     player_black: i32,
@@ -27,4 +27,23 @@ pub async fn create_game(
     .fetch_one(db_pool)
     .await
     .map_err(|err| anyhow!(err))
+}
+
+pub async fn set_game_finished(db_pool: &Pool<Postgres>, game: Game) -> anyhow::Result<Game> {
+    sqlx::query_as!(
+        Game,
+        "UPDATE game SET ended_at = $1 WHERE id = $2 RETURNING *",
+        Utc::now().naive_utc(),
+        game.id
+    )
+    .fetch_one(db_pool)
+    .await
+    .map_err(|err| anyhow!(err))
+}
+
+pub async fn remove_game(db_pool: &Pool<Postgres>, game: Game) -> anyhow::Result<PgQueryResult> {
+    sqlx::query!("DELETE FROM game WHERE id = $1", game.id)
+        .execute(db_pool)
+        .await
+        .map_err(|err| anyhow!(err))
 }

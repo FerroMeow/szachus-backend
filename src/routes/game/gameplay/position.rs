@@ -1,3 +1,5 @@
+use std::fmt;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(PartialEq, Clone, Copy, Serialize, Deserialize, Debug)]
@@ -16,6 +18,38 @@ impl Position {
             row: 7 - self.row,
             column: 7 - self.column,
         }
+    }
+}
+
+impl fmt::Display for Position {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let col = match self.column {
+            0 => "A",
+            1 => "A",
+            2 => "A",
+            3 => "A",
+            4 => "A",
+            5 => "A",
+            6 => "A",
+            7 => "A",
+            _ => {
+                return Err(fmt::Error);
+            }
+        };
+        let row = match self.row {
+            0 => "1",
+            1 => "2",
+            2 => "3",
+            3 => "4",
+            4 => "5",
+            5 => "6",
+            6 => "7",
+            7 => "8",
+            _ => {
+                return Err(fmt::Error);
+            }
+        };
+        write!(f, "{col}{row}")
     }
 }
 
