@@ -19,7 +19,7 @@ pub mod ws_message;
 pub struct Gameplay {
     game_data: Game,
     chess_board: ChessBoard,
-    players: OpponentPair,
+    pub players: OpponentPair,
 }
 
 impl Gameplay {

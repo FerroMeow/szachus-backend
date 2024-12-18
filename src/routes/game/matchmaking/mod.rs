@@ -106,13 +106,23 @@ pub async fn handle_ws(
     // Stop the echo services
     matchmaking_player.echo.abort();
     matchmaking_opponent.echo.abort();
+    let mut open_game = Gameplay::new(
+        game_data,
+        OpponentPair::new(matchmaking_opponent.ws, matchmaking_player.ws),
+    );
     tokio::spawn(async move {
         // Start the game :D
-        let mut open_game = Gameplay::new(
-            game_data,
-            OpponentPair::new(matchmaking_opponent.ws, matchmaking_player.ws),
-        );
-        let _ = open_game.run().await;
+        let game_result = open_game.run().await;
+        // Check for errors
+        if let Err(error) = game_result {
+            println!("Game dropped: {error:?}");
+            // Game has encountered an error. Notify the active players.
+            // This operation will probably foil for one of them, so we ignore the errors, as this is an error handler.
+            let error =
+                ServerMsg::Matchmaking(MatchmakingServerMsg::GameDropped(error.to_string()));
+            let _ = open_game.players.white_player.send_as_text(&error).await;
+            let _ = open_game.players.black_player.send_as_text(&error).await;
+        };
     });
 }
 

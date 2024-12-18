@@ -7,4 +7,5 @@ pub(crate) enum MatchmakingServerMsg {
     Searching,
     Success { color: PieceColor },
     Error(String),
+    GameDropped(String),
 }
