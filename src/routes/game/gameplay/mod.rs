@@ -63,7 +63,6 @@ impl Gameplay {
 
     async fn handle_turn_end(&mut self, piece_move: ChessMove) -> anyhow::Result<()> {
         let player_color = self.players.current_player_color;
-        println!("Current color: {player_color:?}");
         let piece_move = piece_move.maybe_invert(player_color);
         let removed_piece_maybe = self
             .chess_board
@@ -138,7 +137,6 @@ impl Gameplay {
             match self.ws_next_active().await? {
                 GameClientMsg::TurnEnd(piece_move) => {
                     if let Err(error) = self.handle_turn_end(piece_move).await {
-                        println!("Error: {:?}", error);
                         self.ws_send_active(GameServerMsg::Error(format!("{:?}", error)))
                             .await?;
                     };
@@ -155,7 +153,6 @@ impl Gameplay {
                     break;
                 }
                 Err(error) => {
-                    println!("Error: {:?}", error);
                     self.ws_send_active(GameServerMsg::Error(format!("{:?}", error)))
                         .await?;
                 }

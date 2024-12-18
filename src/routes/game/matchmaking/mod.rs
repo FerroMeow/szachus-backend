@@ -45,7 +45,6 @@ pub async fn handle_ws(
     let claims = match claims {
         Ok(claims) => claims,
         Err(error_val) => {
-            println!("Returning, invalid JWT error: {}", error_val);
             return;
         }
     };
@@ -115,7 +114,6 @@ pub async fn handle_ws(
         let game_result = open_game.run().await;
         // Check for errors
         if let Err(error) = game_result {
-            println!("Game dropped: {error:?}");
             // Game has encountered an error. Notify the active players.
             // This operation will probably foil for one of them, so we ignore the errors, as this is an error handler.
             let error =

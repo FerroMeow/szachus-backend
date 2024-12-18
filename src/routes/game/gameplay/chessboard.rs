@@ -44,7 +44,6 @@ impl ChessBoard {
     }
 
     pub fn remove_piece(&mut self, position: Position, color: PieceColor) -> Option<Piece> {
-        println!("Trying to remove a {color:?} piece at {position:?}");
         let position = self.pieces.iter().position(move |current_piece| {
             current_piece.position == position && current_piece.color == color
         })?;
