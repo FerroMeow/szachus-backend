@@ -44,7 +44,7 @@ pub async fn handle_ws(
     let claims = Claims::try_from(jwt_str);
     let claims = match claims {
         Ok(claims) => claims,
-        Err(error_val) => {
+        Err(_) => {
             return;
         }
     };
