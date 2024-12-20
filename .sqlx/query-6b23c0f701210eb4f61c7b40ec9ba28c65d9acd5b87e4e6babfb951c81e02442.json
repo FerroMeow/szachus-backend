@@ -27,6 +27,11 @@
         "ordinal": 4,
         "name": "player_white",
         "type_info": "Int4"
+      },
+      {
+        "ordinal": 5,
+        "name": "winner",
+        "type_info": "Int4"
       }
     ],
     "parameters": {
@@ -40,7 +45,8 @@
       false,
       true,
       false,
-      false
+      false,
+      true
     ]
   },
   "hash": "6b23c0f701210eb4f61c7b40ec9ba28c65d9acd5b87e4e6babfb951c81e02442"

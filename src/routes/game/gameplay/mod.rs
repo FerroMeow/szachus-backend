@@ -181,7 +181,7 @@ impl Gameplay {
                 }
             };
         };
-        set_game_finished(&self.db_pool, &self.game_data)
+        set_game_finished(&self.db_pool, &self.game_data, winner)
             .await
             .unwrap();
         increase_winner_score(&self.db_pool, winner).await?;

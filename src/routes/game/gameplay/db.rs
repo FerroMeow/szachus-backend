@@ -50,11 +50,16 @@ impl GameTurn {
     }
 }
 
-pub async fn set_game_finished(db_pool: &Pool<Postgres>, game: &Game) -> anyhow::Result<Game> {
+pub async fn set_game_finished(
+    db_pool: &Pool<Postgres>,
+    game: &Game,
+    winner: &GamePlayer,
+) -> anyhow::Result<Game> {
     Ok(sqlx::query_as!(
         Game,
-        "UPDATE game SET ended_at = $1 WHERE id = $2 RETURNING *",
+        "UPDATE game SET ended_at = $1, winner = $2 WHERE id = $3 RETURNING *",
         Utc::now().naive_utc(),
+        winner.id,
         game.id
     )
     .fetch_one(db_pool)

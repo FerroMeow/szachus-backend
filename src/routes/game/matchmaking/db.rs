@@ -10,6 +10,7 @@ pub struct Game {
     pub ended_at: Option<NaiveDateTime>,
     pub player_black: i32,
     pub player_white: i32,
+    pub winner: Option<i32>,
 }
 
 pub async fn create_game(

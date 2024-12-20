@@ -10,8 +10,16 @@ CREATE TABLE game (
   id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   started_at timestamp NOT NULL,
   ended_at timestamp,
-  player_black int REFERENCES player NOT NULL,
-  player_white int REFERENCES player NOT NULL
+  player_black int NOT NULL,
+  player_white int NOT NULL,
+  winner int,
+  FOREIGN KEY (player_black) REFERENCES player ON DELETE CASCADE ON UPDATE CASCADE,
+  FOREIGN KEY (player_white) REFERENCES player ON DELETE CASCADE ON UPDATE CASCADE,
+  FOREIGN KEY (winner) REFERENCES player ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT winner_is_player CHECK (
+    winner = player_black
+    OR winner = player_white
+  )
 );
 CREATE TABLE game_turn (
   id int GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
