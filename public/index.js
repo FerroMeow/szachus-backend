@@ -42,9 +42,65 @@ async function onLogin(e) {
   form.removeEventListener("submit", onLogin);
 }
 
+/**
+ *
+ * @param {string} jwtString
+ * @returns {object|null}
+ */
+function parseJwtClaims(jwtString) {
+  const claimsBase64Url = jwtString.split(".").at(1);
+  if (claimsBase64Url === undefined) {
+    return null;
+  }
+  const claimsBase64 = claimsBase64Url.replace(/-/g, "+").replace(/_/g, "/");
+  try {
+    return JSON.parse(window.atob(claimsBase64));
+  } catch (error) {
+    console.error(error);
+    return null;
+  }
+}
+
+/**
+ *
+ * @param {object} claims
+ * @returns {boolean}
+ */
+function isClaimsExpirationValid(claims) {
+  if (typeof claims.exp !== "number" || isNaN(claims.exp)) {
+    return false;
+  }
+  let current_timestamp_ms = window.Date.now();
+  let current_timestamp_s = Math.round(current_timestamp_ms * 0.001);
+  console.debug(
+    claims.exp,
+    current_timestamp_s,
+    claims.exp < current_timestamp_s
+  );
+  return claims.exp < current_timestamp_s;
+}
+
+/**
+ *
+ * @param {string|undefined} jwt
+ * @returns {boolean}
+ */
+function isPlayable(jwt) {
+  if (typeof jwt !== "string") {
+    return false;
+  }
+  let claims = parseJwtClaims(jwt);
+  if (claims === null) {
+    return false;
+  }
+  return isClaimsExpirationValid(claims);
+}
+
 document.addEventListener("szachus-init", szachusInit);
 
-if (typeof window.localStorage?.getItem("jwt") === "string") {
+let jwt = window.localStorage?.getItem("jwt");
+
+if (isPlayable(jwt)) {
   document.dispatchEvent(new Event("szachus-init"));
 } else {
   const form = document.getElementById("login-form");
