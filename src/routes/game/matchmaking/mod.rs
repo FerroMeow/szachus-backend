@@ -6,8 +6,9 @@ use axum::{
     },
     response::Response,
 };
-use db::{create_game, remove_game, set_game_finished};
+use db::{create_game, remove_game, Game};
 use matchmaking_state::{MatchmakingPlayer, UserQueue};
+use sqlx::{Pool, Postgres};
 use ws_message::MatchmakingServerMsg;
 
 use crate::{routes::user::jwt::Claims, GlobalState, ServerState};
@@ -105,30 +106,24 @@ pub async fn handle_ws(
     // Stop the echo services
     matchmaking_player.echo.abort();
     matchmaking_opponent.echo.abort();
-    let mut open_game = Gameplay::new(
-        db_pool.clone(),
-        game_data,
-        OpponentPair::new(matchmaking_opponent.ws, matchmaking_player.ws),
-    );
-    tokio::spawn(async move {
-        // Start the game :D
-        let game_result = open_game.run().await;
-        // Check for errors
-        if let Err(error) = game_result {
-            // Game has encountered an error. Notify the active players.
-            let error =
-                ServerMsg::Matchmaking(MatchmakingServerMsg::GameDropped(error.to_string()));
-            // This operation will probably foil for one of them, so we ignore the errors, as this is an error handler.
-            let _ = open_game.players.white_player.send_as_text(&error).await;
-            let _ = open_game.players.black_player.send_as_text(&error).await;
-            // We still want to panic on database errors though
-            remove_game(&db_pool, open_game.game_data).await.unwrap();
-            return;
-        };
-        set_game_finished(&db_pool, open_game.game_data)
-            .await
-            .unwrap();
-    });
+    let opponent_pair = OpponentPair::new(matchmaking_opponent, matchmaking_player);
+    tokio::spawn(game_session(db_pool.clone(), game_data, opponent_pair));
+}
+
+async fn game_session(db_pool: Pool<Postgres>, game_data: Game, opponent_pair: OpponentPair) {
+    let mut open_game = Gameplay::new(db_pool.clone(), game_data, opponent_pair);
+    // Start the game :D
+    let game_result = open_game.run().await;
+    // Check for errors
+    if let Err(error) = game_result {
+        // Game has encountered an error. Notify the active players.
+        let error = ServerMsg::Matchmaking(MatchmakingServerMsg::GameDropped(error.to_string()));
+        // This operation will probably foil for one of them, so we ignore the errors, as this is an error handler.
+        let _ = open_game.players.white_player.ws.send_as_text(&error).await;
+        let _ = open_game.players.black_player.ws.send_as_text(&error).await;
+        // We still want to panic on database errors though
+        remove_game(&db_pool, open_game.game_data).await.unwrap();
+    };
 }
 
 async fn ws_matchmaking(ws: GameWs, user_queue: UserQueue, user_id: i32) {

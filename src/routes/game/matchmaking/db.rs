@@ -6,10 +6,10 @@ use sqlx::{postgres::PgQueryResult, Pool, Postgres};
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Game {
     pub id: i32,
-    started_at: NaiveDateTime,
-    ended_at: Option<NaiveDateTime>,
-    player_black: i32,
-    player_white: i32,
+    pub started_at: NaiveDateTime,
+    pub ended_at: Option<NaiveDateTime>,
+    pub player_black: i32,
+    pub player_white: i32,
 }
 
 pub async fn create_game(
@@ -23,18 +23,6 @@ pub async fn create_game(
         Utc::now().naive_utc(),
         username_black,
         username_white
-    )
-    .fetch_one(db_pool)
-    .await
-    .map_err(|err| anyhow!(err))
-}
-
-pub async fn set_game_finished(db_pool: &Pool<Postgres>, game: Game) -> anyhow::Result<Game> {
-    sqlx::query_as!(
-        Game,
-        "UPDATE game SET ended_at = $1 WHERE id = $2 RETURNING *",
-        Utc::now().naive_utc(),
-        game.id
     )
     .fetch_one(db_pool)
     .await

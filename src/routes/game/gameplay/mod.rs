@@ -1,7 +1,8 @@
 use anyhow::bail;
 use axum::extract::ws::Message;
 use chessboard::ChessBoard;
-use db::GameTurn;
+use db::{increase_winner_score, set_game_finished, GameTurn};
+use player::GamePlayer;
 use sqlx::{Pool, Postgres};
 use ws_message::GameServerMsg;
 
@@ -15,6 +16,7 @@ use super::ws_messages::{ChessMove, GameClientMsg, ServerMsg};
 pub mod chessboard;
 pub mod db;
 pub mod piece;
+pub mod player;
 pub mod position;
 pub mod ws_message;
 
@@ -53,19 +55,19 @@ impl Gameplay {
     }
 
     async fn ws_send_active(&mut self, msg: GameServerMsg) -> anyhow::Result<()> {
-        Self::ws_send(self.players.get_active(), msg).await
+        Self::ws_send(&self.players.get_active().ws, msg).await
     }
 
     async fn ws_send_passive(&mut self, msg: GameServerMsg) -> anyhow::Result<()> {
-        Self::ws_send(self.players.get_passive(), msg).await
+        Self::ws_send(&self.players.get_passive().ws, msg).await
     }
 
     async fn ws_next_active(&mut self) -> anyhow::Result<GameClientMsg> {
-        Self::ws_next(self.players.get_active()).await
+        Self::ws_next(&self.players.get_active().ws).await
     }
 
     async fn ws_next_passive(&mut self) -> anyhow::Result<GameClientMsg> {
-        Self::ws_next(self.players.get_passive()).await
+        Self::ws_next(&self.players.get_passive().ws).await
     }
 
     async fn handle_turn_end(&mut self, piece_move: ChessMove) -> anyhow::Result<()> {
@@ -93,6 +95,7 @@ impl Gameplay {
             removed_piece_maybe.map(|piece| (piece.color, piece_move.position_to));
         self.players
             .white_player
+            .ws
             .send_as_text(&ServerMsg::Game(GameServerMsg::PawnMove(
                 piece_move,
                 removed_piece_to,
@@ -100,6 +103,7 @@ impl Gameplay {
             .await?;
         self.players
             .black_player
+            .ws
             .send_as_text(&ServerMsg::Game(GameServerMsg::PawnMove(
                 piece_move.invert(),
                 removed_piece_to.map(|to| (to.0, to.1.invert())),
@@ -116,7 +120,7 @@ impl Gameplay {
         Ok(())
     }
 
-    async fn handle_win(&mut self) -> anyhow::Result<bool> {
+    async fn handle_win(&self) -> anyhow::Result<Option<&GamePlayer>> {
         let white_king = self.chess_board.find_king(PieceColor::White);
         let black_king = self.chess_board.find_king(PieceColor::Black);
         let winning_king = match (white_king, black_king) {
@@ -133,11 +137,11 @@ impl Gameplay {
             } else {
                 (self.players.get_passive(), self.players.get_active())
             };
-            Self::ws_send(winner, GameServerMsg::GameEnd(true)).await?;
-            Self::ws_send(loser, GameServerMsg::GameEnd(false)).await?;
-            Ok(true)
+            Self::ws_send(&winner.ws, GameServerMsg::GameEnd(true)).await?;
+            Self::ws_send(&loser.ws, GameServerMsg::GameEnd(false)).await?;
+            Ok(Some(winner))
         } else {
-            Ok(false)
+            Ok(None)
         }
     }
 
@@ -151,7 +155,7 @@ impl Gameplay {
         };
         self.ws_send_active(GameServerMsg::NewTurn(true)).await?;
         self.ws_send_passive(GameServerMsg::NewTurn(false)).await?;
-        loop {
+        let winner = loop {
             match self.ws_next_active().await? {
                 GameClientMsg::TurnEnd(piece_move) => {
                     if let Err(error) = self.handle_turn_end(piece_move).await {
@@ -165,18 +169,22 @@ impl Gameplay {
                 }
             };
             match self.handle_win().await {
-                Ok(false) => {
+                Ok(None) => {
                     self.switch_turns().await?;
                 }
-                Ok(true) => {
-                    break;
+                Ok(Some(winner)) => {
+                    break winner;
                 }
                 Err(error) => {
                     self.ws_send_active(GameServerMsg::Error(format!("{:?}", error)))
                         .await?;
                 }
             };
-        }
+        };
+        set_game_finished(&self.db_pool, &self.game_data)
+            .await
+            .unwrap();
+        increase_winner_score(&self.db_pool, winner).await?;
         Ok(())
     }
 }
