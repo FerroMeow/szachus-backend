@@ -46,6 +46,11 @@ pub async fn handle_ws(
     let claims = match claims {
         Ok(claims) => claims,
         Err(_) => {
+            let _ = ws
+                .send_as_text(&ServerMsg::Matchmaking(MatchmakingServerMsg::Error(
+                    "Invalid JWT!".into(),
+                )))
+                .await;
             return;
         }
     };

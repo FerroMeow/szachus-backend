@@ -56,7 +56,6 @@ function parseJwtClaims(jwtString) {
   try {
     return JSON.parse(window.atob(claimsBase64));
   } catch (error) {
-    console.error(error);
     return null;
   }
 }
@@ -72,12 +71,7 @@ function isClaimsExpirationValid(claims) {
   }
   let current_timestamp_ms = window.Date.now();
   let current_timestamp_s = Math.round(current_timestamp_ms * 0.001);
-  console.debug(
-    claims.exp,
-    current_timestamp_s,
-    claims.exp < current_timestamp_s
-  );
-  return claims.exp < current_timestamp_s;
+  return claims.exp > current_timestamp_s;
 }
 
 /**
