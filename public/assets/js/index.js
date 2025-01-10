@@ -2,18 +2,7 @@ import * as szachus from "../wasm/szachus/szachus.js";
 
 async function szachusInit() {
   await szachus.default();
-  try {
-    szachus.main();
-  } catch (error) {}
-  let main = document.querySelector("main");
-  let h3 = document.createElement("h3");
-  h3.textContent = "Graj teraz";
-  h3.classList.add("text-heading", "text-heading-3");
-  main.append(h3);
-  let container = document.createElement("div");
-  container.classList.add("game-container");
-  main.append(container);
-  container.appendChild(document.querySelector("canvas[alt]"));
+  szachus.main();
 }
 
 async function fetchJson(input, init) {
@@ -102,6 +91,31 @@ function isPlayable(jwt) {
 }
 
 document.addEventListener("szachus-init", szachusInit);
+
+let childObserver = new MutationObserver((mutations) => {
+  for (const mutation of mutations) {
+    let listOfAddedNodes = [...mutation.addedNodes];
+    for (const node of listOfAddedNodes) {
+      if (node.nodeName === "CANVAS") {
+        let main = document.querySelector("main");
+        let h3 = document.createElement("h3");
+        h3.textContent = "Graj teraz";
+        h3.classList.add("text-heading", "text-heading-3");
+        main.append(h3);
+        let container = document.createElement("div");
+        container.classList.add("game-container");
+        main.append(container);
+        container.appendChild(document.querySelector("canvas[alt]"));
+        childObserver.disconnect();
+        return;
+      }
+    }
+  }
+});
+
+childObserver.observe(document.body, {
+  childList: true,
+});
 
 let jwt = window.localStorage?.getItem("jwt");
 
