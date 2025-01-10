@@ -2,38 +2,61 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Szachuś</title>
+    <title>Szachuś | Dwuosobowa Gra w Szachy</title>
+    <link rel="stylesheet" href="/assets/css/style.css" />
   </head>
   <body>
-    <h1>Szachuś</h1>
-    <form action="#" method="post" id="login-form" style="display: none;">
-      <h2>Zaloguj się</h2>
-      <p>
-        <label for="login-username">Nazwa użytkownika</label>
-      </p>
-      <p>
-        <input
-          type="text"
-          autocomplete="username"
-          id="login-username"
-          name="username"
-        />
-      </p>
-      <p>
-        <label for="login-password">Hasło</label>
-      </p>
-      <p>
-        <input
-          type="password"
-          autocomplete="current-password"
-          id="login-password"
-          name="password"
-        />
-      </p>
-      <p>
-        <button>Zaloguj</button>
-      </p>
-    </form>
-    <script defer src="/index.js" type="module"></script>
+    <header class="main-header">
+      <h1 class="text-heading text-heading-1"><a href="/">Szachuś</a></h1>
+      <p class="text-heading text-heading-4">Dwuosobowa gra w szachy</p>
+    </header>
+    <main>
+      <form
+        action="#"
+        method="post"
+        id="login-form"
+        style="display: none;"
+        class="login-form"
+      >
+        <h2 class="text-heading text-heading-2">Zaloguj się</h2>
+        <div>
+          <p>
+            <label for="login-username">Nazwa użytkownika</label>
+          </p>
+          <p>
+            <input
+              type="text"
+              autocomplete="username"
+              id="login-username"
+              name="username"
+              class="input"
+            />
+          </p>
+        </div>
+        <div>
+          <p>
+            <label for="login-password">Hasło</label>
+          </p>
+          <p>
+            <input
+              type="password"
+              autocomplete="current-password"
+              id="login-password"
+              name="password"
+              class="input"
+            />
+          </p>
+        </div>
+        <p>
+          <button class="btn">Zaloguj</button>
+        </p>
+      </form>
+    </main>
+    <footer class="main-footer">
+      <h6 class="text-heading text-heading-6">
+        Szachuś, 2024
+      </h6>
+    </footer>
+    <script defer src="assets/js/index.js" type="module"></script>
   </body>
 </html>
