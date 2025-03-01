@@ -5,6 +5,7 @@ services:
   psql:
     image: postgres # this uses the 'latest' version
     environment:
+      POSTGRES_DB: szachus
       POSTGRES_PASSWORD: example # only do this in development
     volumes:
       - psql:/var/lib/postgresql/data # save data between restarts
